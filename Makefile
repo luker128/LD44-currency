@@ -1,7 +1,7 @@
 CC = emcc
-SRC = main.cpp game.cpp lodepng.cpp gfx.cpp level.cpp intro.cpp
+SRC = *.cpp
 
-all: web
+all: run
 
 web:
 	$(CC) -std=c++11 $(SRC) -O2 -s USE_WEBGL2=1 --preload-file data -o html/game.html
@@ -9,3 +9,6 @@ web:
 
 native:
 	g++ -g $(SRC) -O2 -lSDL2 -lGL -lGLU
+
+run: native
+	./a.out
