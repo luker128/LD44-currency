@@ -284,7 +284,7 @@ class SpriteShader {
       }
       return *instance;
     }
-    void drawSprite(const Image& image, int x, int y, int tile, int sheetsize, int scale_x, int scale_y);
+    void drawSprite(const Image& image, int x, int y, int tile, int sheetsize, int scale_x, int scale_y, double angle = 0.0);
   private:
     static SpriteShader* instance;
     SpriteShader();
@@ -296,6 +296,7 @@ class SpriteShader {
     GLuint texcoordBuffer;
     GLint u_scroll;
     GLint u_scale;
+    GLint u_angle;
     GLint u_tile;
     GLint u_sheetsize;
     GLint u_skipzero;
@@ -312,11 +313,13 @@ SpriteShader::SpriteShader() {
     "uniform float u_tile; \n"
     "uniform vec2 u_scroll; \n"
     "uniform vec2 u_scale; \n"
+    "uniform float u_angle; \n"
     "uniform float u_sheetsize; \n"
     "uniform vec2 u_screensize; \n"
     "void main() { \n"
     "  v_texcoord = (a_texcoord/u_sheetsize) + vec2(mod(u_tile, u_sheetsize)/u_sheetsize, floor(u_tile/u_sheetsize)/u_sheetsize); \n"
-    "  vec2 pos = (a_position * u_scale) + u_scroll;\n"
+    "  vec2 rotated_pos = a_position * mat2(cos(u_angle), -sin(u_angle), sin(u_angle), cos(u_angle)); \n"
+    "  vec2 pos = (rotated_pos * u_scale) + u_scroll;\n"
     "  vec2 scaled_pos = ((pos/u_screensize) * 2.0 - 1.0) * vec2(1.0, -1.0); \n"
     "  gl_Position = vec4(scaled_pos, 1.0, 1.0); \n"
     "}\n";
@@ -334,7 +337,7 @@ SpriteShader::SpriteShader() {
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  GLfloat positions[12] = {0,0, 0,1, 1,0,  0,1, 1,0, 1,1};
+  GLfloat positions[12] = {-1,-1, -1,1, 1,-1,  -1,1, 1,-1, 1,1};
   a_positionLocation = glGetAttribLocation(program, "a_position");
   glGenBuffers(1, &positionBuffer);
   glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
@@ -355,9 +358,10 @@ SpriteShader::SpriteShader() {
   u_scale = glGetUniformLocation(program, "u_scale");
   u_sheetsize = glGetUniformLocation(program, "u_sheetsize");
   u_screensize = glGetUniformLocation(program, "u_screensize");
+  u_angle = glGetUniformLocation(program, "u_angle");
 }
 
-void SpriteShader::drawSprite(const Image& image, int x, int y, int tile, int sheetsize, int scale_x, int scale_y) {
+void SpriteShader::drawSprite(const Image& image, int x, int y, int tile, int sheetsize, int scale_x, int scale_y, double angle) {
   glUseProgram(program);
   glBindVertexArray(vao);
   glBindTexture(GL_TEXTURE_2D, image.getTexture());
@@ -366,17 +370,32 @@ void SpriteShader::drawSprite(const Image& image, int x, int y, int tile, int sh
   glUniform2f(u_screensize, screen_w, screen_h);
   glUniform2f(u_scroll, x, y);
   glUniform1f(u_tile, tile);
+  glUniform1f(u_angle, angle);
   glDrawArrays(GL_TRIANGLES, 0, POINTS_PER_TILE);
 }
 
 
 
-SpriteSheet::SpriteSheet(const Image& image, int frameWidth, int frameHeight)
-  : image(image),
+SpriteSheet::SpriteSheet(const std::string& filename, int frameWidth, int frameHeight)
+  : ownImage(new Image(filename)),
+    image(*ownImage),
     sheetSize(image.getWidth()/frameWidth),
     frameWidth(frameWidth),
     frameHeight(frameHeight) {
   SpriteShader::getInstance();
+}
+
+SpriteSheet::SpriteSheet(const Image& image, int frameWidth, int frameHeight)
+  : ownImage(nullptr),
+    image(image),
+    sheetSize(image.getWidth()/frameWidth),
+    frameWidth(frameWidth),
+    frameHeight(frameHeight) {
+  SpriteShader::getInstance();
+}
+
+SpriteSheet::~SpriteSheet() {
+  delete ownImage;
 }
 
 void SpriteSheet::drawSprite(int x, int y, int frame) {
@@ -390,3 +409,8 @@ void SpriteSheet::drawSpriteFlipped(int x, int y, int frame) {
 void SpriteSheet::drawSpriteScaled(int x, int y, int frame, float scale) {
   SpriteShader::getInstance().drawSprite(image, x, y, frame, sheetSize, frameWidth*scale, frameHeight*scale);
 }
+
+void SpriteSheet::drawSpriteRotated(int x, int y, int frame, float scale) {
+  SpriteShader::getInstance().drawSprite(image, x, y, frame, sheetSize, frameWidth, frameHeight, scale);
+}
+

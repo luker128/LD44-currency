@@ -42,11 +42,15 @@ class Tilemap {
 class SpriteSheet {
   public:
     SpriteSheet(const Image& image, int frame_w, int frame_h);
+    SpriteSheet(const std::string&, int frame_w, int frame_h);
+    ~SpriteSheet();
     void drawSprite(int x, int y, int frame);
     void drawSpriteFlipped(int x, int y, int frame);
     void drawSpriteScaled(int x, int y, int frame, float scale);
+    void drawSpriteRotated(int x, int y, int frame, float rotation);
     int getFrameWidth() { return frameWidth; }
   private:
+    const Image* ownImage;
     const Image& image;
     const int sheetSize;
     const int frameWidth;
