@@ -11,6 +11,8 @@ int mouse_x = 0;
 int mouse_y = 0;
 bool mouse_left = false;
 bool mouse_right = false;
+int joy_x = 0;
+int joy_y = 0;
 
 unsigned int load_texture (const char *filename, unsigned int filter, int *out_w, int *out_h, float *out_u, float *out_v ) {
     std::vector<unsigned char> image;
@@ -142,6 +144,8 @@ bool processInput() {
 
 #include <SDL2/SDL.h>
 
+SDL_GameController *controller = NULL;
+
 bool keys[SDL_NUM_SCANCODES];
 bool processInput() {
   SDL_Event event;
@@ -188,9 +192,66 @@ bool processInput() {
         mouse_button(false, event.button.button, event.button.x, event.button.y);
         break;
       }
+      case SDL_JOYAXISMOTION: {
+        if (event.jaxis.axis == 0) {
+          joy_x = event.jaxis.value;
+        }
+        if (event.jaxis.axis == 1) {
+          joy_y = event.jaxis.value;
+        }
+        break;
+      }
     }
   }
   return true;
+}
+
+void init_controller() {
+  // Variables for controllers and joysticks
+
+  // Enumerate joysticks
+  std::cout << "Enumerating " << SDL_NumJoysticks() << " joysticks" << std::endl;
+  for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+
+    // Check to see if joystick supports SDL's game controller interface
+    if (SDL_IsGameController(i)) {
+      controller = SDL_GameControllerOpen(i);
+      if (controller) {
+        std::cout << "Found a valid controller, named: " << SDL_GameControllerName(controller) << std::endl;
+        break;  // Break after first available controller
+      } else {
+        std::cout << "Could not open game controller " << i << ": " << SDL_GetError() << std::endl;
+      }
+
+    // Controller interface not supported, try to open as joystick
+    } else {
+      std::cout << "Joystick " << i << " is not supported by the game controller interface" << std::endl;
+/*
+      joy = SDL_JoystickOpen(i);
+
+      // Joystick is valid
+      if (joy) {
+        sprintf(S2D_msg,
+          "Opened Joystick %i\n"
+          "Name: %s\n"
+          "Axes: %d\n"
+          "Buttons: %d\n"
+          "Balls: %d\n",
+          i, SDL_JoystickName(joy), SDL_JoystickNumAxes(joy),
+          SDL_JoystickNumButtons(joy), SDL_JoystickNumBalls(joy)
+        );
+        S2D_Log(S2D_msg, S2D_INFO);
+
+      // Joystick not valid
+      } else {
+        sprintf(S2D_msg, "Could not open Joystick %i", i);
+        S2D_Log(S2D_msg, S2D_ERROR);
+      }
+
+      break;  // Break after first available joystick
+      */
+    }
+  }
 }
   
 SDL_Window* sdlWindow;
@@ -198,7 +259,7 @@ SDL_Window* sdlWindow;
 void createWindow(int w, int h, const char* name) {
   screen_w = w;
   screen_h = h;
-  SDL_Init(SDL_INIT_VIDEO);
+  SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
   sdlWindow = SDL_CreateWindow(name,SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED, screen_w, screen_h, SDL_WINDOW_OPENGL);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -207,6 +268,7 @@ void createWindow(int w, int h, const char* name) {
   if (context == NULL) {
     std::cout << "Error creating context" << std::endl;
   }
+  init_controller();
 }
 
 int getTick() {

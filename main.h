@@ -5,6 +5,8 @@ extern int screen_w;
 extern int screen_h;
 extern int mouse_x;
 extern int mouse_y;
+extern int joy_x;
+extern int joy_y;
 extern bool keys[];
 void createWindow(int w, int h, const char* name);
 int getTick();

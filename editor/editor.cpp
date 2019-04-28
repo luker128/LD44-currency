@@ -4,10 +4,12 @@
 #include <cmath>
 #include <cstdlib>
 #include <string>
+#include <map>
 #include <tuple>
 #include <vector>
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include "main.h"
 #include "primitive.h"
 #include "gfx.h"
@@ -84,16 +86,13 @@ class Editor {
   public:
 
     Editor() :
-      coinImage("data/coin.png", 32, 32)
-      // https://www.deviantart.com/strapaca/art/Diamond-metal-floor-seamless-texture-787512023
-//      terrainImage("data/steel.png") {
-      //  https://www.deviantart.com/strapaca/art/Fresh-dark-green-gras-seamless-texture-782082733
-//      terrainImage("data/grass.png") {
-      // https://www.deviantart.com/strapaca/art/Brick-wall-seamless-texture-782082949
-//      terrainImage("data/bricks.png")
+      coinImage("data/coin5.png", 64, 64)
     {
+      // https://www.deviantart.com/strapaca/art/Brick-wall-seamless-texture-782082949
       textures.emplace_back("data/bricks.png");
+      // https://www.deviantart.com/strapaca/art/Diamond-metal-floor-seamless-texture-787512023
       textures.emplace_back("data/steel.png");
+      //  https://www.deviantart.com/strapaca/art/Fresh-dark-green-gras-seamless-texture-782082733
       textures.emplace_back("data/grass.png");
     }
 
@@ -125,6 +124,8 @@ class Editor {
     }
 
     bool gameLoop() {
+      mX = mouse_x - scrollX;
+      mY = mouse_y - scrollY;
       update();
       draw();
       return true;
@@ -135,12 +136,12 @@ class Editor {
     void mouseDownLeft() {}
     void mouseUpLeft() {
       if (newPolygon != nullptr) {
-        addPointToPolygon(mouse_x, mouse_y, *newPolygon);
+        addPointToPolygon(mX, mY, *newPolygon);
       }
       else {
         // move existing point
         if (currentPoint == nullptr) {
-          auto p = getPointAt(mouse_x, mouse_y);
+          auto p = getPointAt(mX, mY);
           std::cout << p << std::endl;
           currentPoint = p;
         }
@@ -154,18 +155,27 @@ class Editor {
     void mouseUpRight() {
     }
 
-    void mouseDownMiddle() {}
+    void mouseDownMiddle() {
+      scrolling = true;
+      scrollStartX = mouse_x;
+      scrollStartY = mouse_y;
+    }
     void mouseUpMiddle() {
-//      std::cout << getPolygonAt(mouse_x, mouse_y) << std::endl;
-//      std::cout << findNearestLine(mouse_x, mouse_y) << std::endl;
+      scrolling = false;
+//      std::cout << getPolygonAt(mX, mY) << std::endl;
+//      std::cout << findNearestLine(mX, mY) << std::endl;
     }
 
     void keyPress(int key) {
       std::cout << key << std::endl;
+      if (key == 127) { // delete
+        delete coin;
+        coin = nullptr;
+      }
       if (key == 32) { // SPACE
         if (newPolygon == nullptr)  {
           newPolygon = new Polygon();
-          addPointToPolygon(mouse_x, mouse_y, *newPolygon);
+          addPointToPolygon(mX, mY, *newPolygon);
         }
         else {
           Point* firstPoint = newPolygon->points.front();
@@ -178,23 +188,93 @@ class Editor {
         drawFilledPolygons = !drawFilledPolygons;
       }
       if (key == '\r') {
-        spawnCoin(mouse_x, mouse_y);
+        spawnCoin(mX, mY);
       }
       if (key == 75) { // pg up
-        Polygon* poly = getPolygonAt(mouse_x, mouse_y);
+        Polygon* poly = getPolygonAt(mX, mY);
         poly->textureId++;
         if (poly->textureId == textures.size()) {
           poly->textureId = 0;
         }
       }
       if (key == 78) { // pg dn
-        Polygon* poly = getPolygonAt(mouse_x, mouse_y);
+        Polygon* poly = getPolygonAt(mX, mY);
         poly->textureId--;
         if (poly->textureId == -1) {
           poly->textureId = textures.size()-1;
         }
       }
+      if (key == 'l') {
+        loadLevel();
+      }
+      if (key == 's') {
+        saveLevel();
+      }
+      if (key == 80) {
+        coin->velocity.x -= 0.1;
+      }
+      if (key == 79) {
+        coin->velocity.x += 0.1;
+      }
+    }
 
+    void saveLevel() {
+      std::map<Point*, int> pointIds;
+      std::vector<Point*> pointsById;
+      int count = 0;
+      for (Polygon* polygon: polygons) {
+        for (Point* point: polygon->points) {
+          if (pointIds.find(point) == pointIds.end()) {
+            pointIds[point] = count;
+            count++;
+            pointsById.push_back(point);
+          }
+        }
+      }
+      std::ofstream file("level.txt");
+      file << pointIds.size() << std::endl;
+      for (const auto& p: pointsById) {
+        file << p->x << " " << p->y << std::endl;
+      }
+      file << polygons.size() << std::endl;
+      for (Polygon* polygon: polygons) {
+        file << polygon->textureId << " ";
+        file << polygon->points.size();
+        for (Point* point: polygon->points) {
+          file << " " << pointIds[point];
+        }
+        file << std::endl;
+      }
+    }
+
+    void loadLevel() {
+      std::ifstream file("level.txt");
+      int numPoints;
+      file >> numPoints;
+      std::vector<Point*> points;
+      for (int i=0; i<numPoints; i++) {
+        int x;
+        int y;
+        file >> x >> y;
+        points.push_back(new Point(x, y));
+      }
+      int numPolygons;
+      file >> numPolygons;
+      for (int i=0; i<numPolygons; i++) {
+        Polygon* polygon = new Polygon;
+        int textureId;
+        int numPoints;
+        file >> textureId >> numPoints;
+        polygon->textureId = textureId;
+        for (int j=0; j<numPoints; j++) {
+          int pointId;
+          file >> pointId;
+          std::cout << pointId << " ";
+          polygon->points.push_back(points[pointId]);
+        }
+        std::cout << std::endl;
+        polygons.push_back(polygon);
+      }
     }
 
     void addPointToPolygon(int x, int y, Polygon& polygon) {
@@ -315,7 +395,7 @@ class Editor {
     }
 
 
-    void applyVelocity(Coin& coin, bool recursion = false) {
+    void applyVelocity(Coin& coin, int recursion = 0) {
       float newX = coin.position.x + coin.velocity.x;
       float newY = coin.position.y + coin.velocity.y;
       /*
@@ -334,7 +414,7 @@ class Editor {
         mCurrentLine.polygon = nullptr;
       }
       else {
-        if (recursion) {
+        if (recursion > 5) {
           coin.velocity = {0.0, 0.0};
           return;
         }
@@ -347,21 +427,45 @@ class Editor {
         coin.velocity = Point(lineDx, lineDy) * magn;
 
         coin.sliding = true;
-        applyVelocity(coin, true); // after adjustment, try again
+        applyVelocity(coin, recursion+1); // after adjustment, try again
       }
+    }
+
+    float getJoyValue() {
+      // std::cout << "input:   " << joy_x;
+      int reduced = joy_x / 1024;
+      // std::cout << "reduced: " << reduced << std::endl;
+      float scaled = reduced / 30.0;
+      // std::cout << "scaled:  " << scaled << std::endl;
+      if (scaled > 1.0) {
+        scaled = 1.0;
+      }
+      if (scaled < -1.0) {
+        scaled = -1.0;
+      }
+      // std::cout << "clamped: " << scaled << std::endl;
+      return scaled;
     }
 
     void updateCoin(Coin& coin) {
       if (std::fabs(coin.velocity.y) < GRAVITY_MAX) {
         coin.velocity.y += GRAVITY;
       }
+      float joyValue = getJoyValue();
+      coin.velocity.x += joyValue * 0.03;
       applyVelocity(coin);
     }
 
     void update() {
+      if (scrolling) {
+        scrollX += (mouse_x - scrollStartX);
+        scrollY += (mouse_y - scrollStartY);
+        scrollStartX = mouse_x;
+        scrollStartY = mouse_y;
+      }
       if (currentPoint != nullptr) {
-        currentPoint->x = mouse_x;
-        currentPoint->y = mouse_y;
+        currentPoint->x = mX;
+        currentPoint->y = mY;
       }
       if (coin != nullptr) {
         updateCoin(*coin);
@@ -403,6 +507,13 @@ class Editor {
 
     void draw() {
       glClear(GL_COLOR_BUFFER_BIT);
+      if (coin != nullptr) {
+        prim.setScroll((screen_w/2)-coin->position.x,
+                       (screen_h/2)-coin->position.y);
+      }
+      else {
+        prim.setScroll(scrollX, scrollY);
+      }
       prim.setColor(1,1,1,1);
       for (Polygon* poly: polygons) {
         drawPolygon(*poly);
@@ -415,15 +526,16 @@ class Editor {
         if (coin->velocity.x != 0) {
           coin->rotation += coin->velocity.x / COIN_SIZE;
         }
-        coinImage.drawSpriteRotated(coin->position.x, coin->position.y, 0, coin->rotation);
+        //coinImage.drawSpriteRotated(coin->position.x+scrollX, coin->position.y+scrollY, 0, coin->rotation);
+        coinImage.drawSpriteRotated(screen_w / 2, screen_h /2, 0, coin->rotation);
         prim.drawLine(coin->position.x, coin->position.y,
                       coin->position.x + coin->velocity.x * 30,
                       coin->position.y + coin->velocity.y * 30
             );
       }
 
-//      float r = findNearestLine(mouse_x, mouse_y);
-//      prim.drawCircleOutline(mouse_x, mouse_y, r);
+//      float r = findNearestLine(mX, mY);
+//      prim.drawCircleOutline(mX, mY, r);
     }
 
     void spawnCoin(int x, int y) {
@@ -442,6 +554,13 @@ class Editor {
     Point* currentPoint = nullptr;
     LineInPoly mCurrentLine;
     std::vector<Image> textures;
+    float scrollX = 0;
+    float scrollY = 0;
+    bool scrolling = false;
+    int scrollStartX;
+    int scrollStartY;
+    int mX;
+    int mY;
 };
 
 
@@ -469,7 +588,7 @@ void gameInit() {
   glViewport(0, 0, screen_w, screen_h);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glClearColor(0.4, 0.4, 0.4, 1.0);
+  glClearColor(101/255.0, 184/255.0, 227/225.0, 1.0);
   editor = new Editor();
 }
 

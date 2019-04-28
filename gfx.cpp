@@ -337,7 +337,7 @@ SpriteShader::SpriteShader() {
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  GLfloat positions[12] = {-1,-1, -1,1, 1,-1,  -1,1, 1,-1, 1,1};
+  GLfloat positions[12] = {-0.5,-0.5, -0.5,0.5, 0.5,-0.5,  -0.5,0.5, 0.5,-0.5, 0.5,0.5};
   a_positionLocation = glGetAttribLocation(program, "a_position");
   glGenBuffers(1, &positionBuffer);
   glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);

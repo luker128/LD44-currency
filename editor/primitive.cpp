@@ -53,7 +53,7 @@ PrimitiveShader::PrimitiveShader() : red(1.0), green(1.0), blue(1.0), alpha(1.0)
     "  vec2 pos = a_position + u_scroll;\n"
     "  vec2 scaled_pos = ((pos/u_screensize) * 2.0 - 1.0) * vec2(1.0, -1.0); \n"
     "  gl_Position = vec4(scaled_pos, 1.0, 1.0); \n"
-    "  v_texcoord = pos / 128.0; \n"
+    "  v_texcoord = a_position / 128.0; \n"
     "} \n";
   std::string fragmentShader = "#version 300 es \n"
     "precision mediump float; \n"
