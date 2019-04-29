@@ -192,9 +192,18 @@ bool processInput() {
         mouse_button(false, event.button.button, event.button.x, event.button.y);
         break;
       }
+      case SDL_JOYBUTTONDOWN: {
+        joy_button(true, event.jbutton.button);
+        break;
+      }
+      case SDL_JOYBUTTONUP: {
+        joy_button(false, event.jbutton.button);
+        break;
+      }
       case SDL_JOYAXISMOTION: {
         if (event.jaxis.axis == 0) {
           joy_x = event.jaxis.value;
+          std::cout << "Joy " << joy_x << std::endl;
         }
         if (event.jaxis.axis == 1) {
           joy_y = event.jaxis.value;

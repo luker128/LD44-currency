@@ -17,6 +17,7 @@ void destroy_texture(unsigned int texture);
 void gameInit();
 bool gameLoop();
 void gameCleanup();
-void mouse_button( bool pressed, int button, int x, int y );
+void mouse_button(bool pressed, int button, int x, int y );
+void joy_button(bool pressed, int button);
 void key_press(bool pressed, unsigned char, unsigned short key);
 

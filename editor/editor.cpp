@@ -24,15 +24,17 @@ struct Point {
 struct Coin {
   Point position;
   Point velocity;
+  Point acceleration;
   float rotation = 0.0;
-  bool sliding = false;
-  Coin(int x, int y) : position(x, y), velocity(0, 0) {}
+  bool jump = false;
+  bool onGround = false;
+  Coin(int x, int y) : position(x, y), velocity(0, 0), acceleration(0, 0) {}
 };
 
 const int COIN_SIZE = 32;
 const int POINT_SIZE = 3;
 const float GRAVITY = 0.1;
-const float GRAVITY_MAX = 3;
+const float GRAVITY_MAX = 0.1;
 
 struct Polygon {
   std::vector<Point*> points;
@@ -60,6 +62,10 @@ float len2(const Point& v) {
   return v.x*v.x + v.y*v.y;
 }
 
+Point operator+(const Point& a, const Point& b) {
+  return Point(a.x + b.x, a.y + b.y);
+}
+
 Point operator-(const Point& a, const Point& b) {
   return Point(a.x - b.x, a.y - b.y);
 }
@@ -67,6 +73,10 @@ Point operator-(const Point& a, const Point& b) {
 std::ostream& operator<<(std::ostream& os, const Point& v) {
   os << "(" << v.x << ", " << v.y << ")";
   return os;
+}
+
+bool operator!=(const Point& a, const Point& b) {
+  return a.x != b.x || a.y != b.y; // TODO: use epsilon
 }
 
 float sign(float a) {
@@ -94,12 +104,25 @@ class Editor {
       textures.emplace_back("data/steel.png");
       //  https://www.deviantart.com/strapaca/art/Fresh-dark-green-gras-seamless-texture-782082733
       textures.emplace_back("data/grass.png");
+
+      drawFilledPolygons = true;
+      loadLevel();
+      spawnCoin(200, 100);
     }
 
     void keyPressEvent(bool pressed, unsigned char key, unsigned short code) {
       if (pressed == true) {
         keyPress(key);
       }
+      if (key == 82 || key == 38) {
+        jumpKey = pressed;
+      }
+      if (key == 80 || key == 37) {
+        leftKey = pressed;
+      }
+      if (key == 79 || key == 39) {
+        rightKey = pressed;
+      } 
     }
 
     void mouseButton(bool pressed, int button) {
@@ -123,6 +146,15 @@ class Editor {
       }
     }
 
+    void joyButton(bool pressed, int button) {
+      if (pressed == true) {
+        jumpButtonPressed();
+      } else {
+        jumpButtonReleased();
+      }
+    }
+
+
     bool gameLoop() {
       mX = mouse_x - scrollX;
       mY = mouse_y - scrollY;
@@ -133,26 +165,39 @@ class Editor {
 
   private:
 
-    void mouseDownLeft() {}
-    void mouseUpLeft() {
-      if (newPolygon != nullptr) {
-        addPointToPolygon(mX, mY, *newPolygon);
-      }
-      else {
-        // move existing point
+
+// Input
+///////////////////
+
+
+    void mouseDownLeft() {
+      if (newPolygon == nullptr) {
         if (currentPoint == nullptr) {
           auto p = getPointAt(mX, mY);
           std::cout << p << std::endl;
           currentPoint = p;
         }
-        else {
-          currentPoint = nullptr;
+      }
+    }
+    void mouseUpLeft() {
+      if (newPolygon != nullptr) {
+        addPointToPolygon(mX, mY, *newPolygon);
+      }
+      else {
+             if (currentPoint == nullptr) {
+          auto p = getPointAt(mX, mY);
+          std::cout << p << std::endl;
+          currentPoint = p;
         }
+        currentPoint = nullptr;
       }
     }
 
     void mouseDownRight() {}
     void mouseUpRight() {
+      if (newPolygon != nullptr) {
+        newPolygon->points.pop_back();
+      }
     }
 
     void mouseDownMiddle() {
@@ -210,13 +255,41 @@ class Editor {
       if (key == 's') {
         saveLevel();
       }
-      if (key == 80) {
-        coin->velocity.x -= 0.1;
+    }
+
+    float getJoyValue() {
+      // std::cout << "input:   " << joy_x;
+      int reduced = joy_x / 1024;
+      // std::cout << "reduced: " << reduced << std::endl;
+      float scaled = reduced / 30.0;
+      // std::cout << "scaled:  " << scaled << std::endl;
+      if (scaled > 1.0) {
+        scaled = 1.0;
       }
-      if (key == 79) {
-        coin->velocity.x += 0.1;
+      if (scaled < -1.0) {
+        scaled = -1.0;
+      }
+      // std::cout << "clamped: " << scaled << std::endl;
+      return scaled;
+    }
+
+    void jumpButtonPressed() {
+      std::cout << "jump" << std::endl;
+      if (coin != nullptr) {
+        coin->jump = true;
       }
     }
+
+    void jumpButtonReleased() {
+      std::cout << "no jump" << std::endl;
+      if (coin != nullptr) {
+        coin->jump = false;
+      }
+    }
+
+// Level serialization
+///////////////////
+
 
     void saveLevel() {
       std::map<Point*, int> pointIds;
@@ -231,7 +304,7 @@ class Editor {
           }
         }
       }
-      std::ofstream file("level.txt");
+      std::ofstream file("data/level.txt");
       file << pointIds.size() << std::endl;
       for (const auto& p: pointsById) {
         file << p->x << " " << p->y << std::endl;
@@ -248,7 +321,7 @@ class Editor {
     }
 
     void loadLevel() {
-      std::ifstream file("level.txt");
+      std::ifstream file("data/level.txt");
       int numPoints;
       file >> numPoints;
       std::vector<Point*> points;
@@ -269,13 +342,16 @@ class Editor {
         for (int j=0; j<numPoints; j++) {
           int pointId;
           file >> pointId;
-          std::cout << pointId << " ";
           polygon->points.push_back(points[pointId]);
         }
-        std::cout << std::endl;
         polygons.push_back(polygon);
       }
     }
+
+
+// Level editting
+///////////////////
+
 
     void addPointToPolygon(int x, int y, Polygon& polygon) {
       Point* oldPoint = getPointAt(x, y);
@@ -287,6 +363,11 @@ class Editor {
         polygon.points.push_back(oldPoint);
       }
     }
+
+
+// Polygon math
+///////////////////
+
 
     Point* getPointAt(int x, int y) {
       for (const auto& poly: polygons) {
@@ -303,10 +384,18 @@ class Editor {
 
     bool sideOfLine(float x, float y, Point* a, Point* b) {
       // std::cout << "checking side " << x << ", " << y << " of line "
-      //  << a->x << ", " << a->y << " - " << b->x << ", " << b->y;
+      //   << a->x << ", " << a->y << " - " << b->x << ", " << b->y;
 
       float dy = (b->y - a->y);
       float dx = (b->x - a->x);
+      if (dx == 0) {
+        if (a->y > b->y) {
+          return x > a->x;
+        }
+        else {
+          return x < a->x;
+        }
+      }
       float direction = dy/dx;
       float position = a->y - direction*a->x;
 
@@ -335,6 +424,7 @@ class Editor {
       return true;
     }
 
+    Polygon* getPolygonAt(const Point& p) { return getPolygonAt(p.x, p.y); }
     Polygon* getPolygonAt(float x, float y) {
       for (Polygon* polygon: polygons) {
         if (isInPolygon(x, y, *polygon)) {
@@ -351,7 +441,8 @@ class Editor {
       float direction = dy/dx;
       float position = a->y - direction*a->x;
       float A = -direction;
-      float B = 1; // or 0 if dx == 0?
+      //float B = 1; // or 0 if dx == 0?
+      float B = (dx == 0)? 0 : 1;
       float C = -position;
       float dist = fabs(A*x + B*y + C) / sqrt(A*A+B*B);
 
@@ -376,15 +467,23 @@ class Editor {
     struct LineInPoly {
       Polygon* polygon;
       size_t pointIndex;
+      Point vector() {
+        float lineDx = (polygon->points[pointIndex+1]->x - polygon->points[pointIndex]->x);
+        float lineDy = (polygon->points[pointIndex+1]->y - polygon->points[pointIndex]->y);
+        return Point(lineDx, lineDy);
+      }
     };
 
-    std::tuple<float, LineInPoly> findNearestLine(float x, float y) {
+    std::tuple<float, LineInPoly> findNearestLine(const Point& p) {
       // std::cout << "finding line nearest to " << x << ", " << y << std::endl;
       float min = FLT_MAX;
       LineInPoly nearestLine = {nullptr, 0};
       for (Polygon* polygon: polygons) {
         for (size_t i=0; i+1<polygon->points.size(); i++) {
-          float distance = distanceToLine(x, y, polygon->points[i], polygon->points[i+1]);
+          if (sideOfLine(p.x, p.y, polygon->points[i], polygon->points[i+1])) {
+            continue;
+          }
+          float distance = distanceToLine(p.x, p.y, polygon->points[i], polygon->points[i+1]);
           if (distance < min) {
             min = distance;
             nearestLine = {polygon, i};
@@ -395,64 +494,114 @@ class Editor {
     }
 
 
-    void applyVelocity(Coin& coin, int recursion = 0) {
+    Point project(Point what, Point where) {
+      float magn = scalarMult(what, where) / len2(where);
+      return where * magn;
+    }
+
+// Physics
+///////////////////
+
+/*
+    void applyVelocity_old(Coin& coin, int recursion = 0) {
       float newX = coin.position.x + coin.velocity.x;
       float newY = coin.position.y + coin.velocity.y;
-      /*
-      Polygon* collidingPolygon = getPolygonAt(newX, newY);
-      if (collidingPolygon == nullptr) {
-      */
       float lineDistance;
       LineInPoly nearestLine;
       std::tie(lineDistance, nearestLine)  = findNearestLine(newX, newY);
-      if (lineDistance > COIN_SIZE) {
-        coin.position.x = newX;
-        coin.position.y = newY;
-        if (!recursion) {
-          coin.sliding = false;
+     }
+*/
+
+    Point clip(const Point& position, const Point& velocity, int recursion=0) {
+      float lineDistance;
+      LineInPoly nearestLine;
+      std::tie(lineDistance, nearestLine)  = findNearestLine(position + velocity);
+      if (lineDistance < COIN_SIZE) {
+        if (recursion > 5) {
+          return velocity;
         }
-        mCurrentLine.polygon = nullptr;
+        Point line = nearestLine.vector();
+        Point newVelocity = project(velocity, line);
+        return clip(position, newVelocity, recursion+1);
+      }
+      return velocity;
+    }
+
+    bool willClip(const Point& position) {
+      float lineDistance;
+      LineInPoly nearestLine;
+      std::tie(lineDistance, nearestLine)  = findNearestLine(position);
+      return lineDistance < (COIN_SIZE);
+    }
+
+    Point clipPosition(const Point& position, const Point& velocity) {
+      // std::cout << "checking position clip: position " << position << " velocity " << velocity << std::endl;
+      float distance = len(velocity);
+      Point direction = velocity / distance;
+      Point pos = position;
+      float step = 0.1;
+      for (float f=0; f<distance; f+=step) {
+        Point newPos = pos + direction * step;
+        //std::cout << "Any polygons at " << (newPos + direction*COIN_SIZE) << "?" << std::endl;
+        if (willClip(newPos)) {
+          //std::cout << "clipping position " << position << " with velocity " << velocity << " to " << pos << std::endl;
+          return pos;
+        }
+        pos = newPos;
+      }
+      //std::cout << "final check for clipping. position " << position << " velocity " << velocity << " is polygon at " << (position + velocity + direction*COIN_SIZE) << "?" << std::endl;
+      if (willClip(position + velocity)) {
+        //std::cout << "clipping position " << position << " with velocity " << velocity << " to original" << std::endl;
+        return position;
+      }
+      //std::cout << "position unclipped " << position << " + " << velocity << " = " << (position + velocity) << std::endl;
+      return position + velocity;
+    }
+
+    void applyVelocity(Coin& coin) {
+      coin.velocity = coin.velocity + coin.acceleration;
+      Point clippedVelocity = clip(coin.position, coin.velocity);
+      Point clippedPosition = clipPosition(coin.position, coin.velocity);
+      coin.position = clippedPosition;
+      if (coin.velocity != clippedVelocity) {
+        coin.onGround = true;
+        //std::cout << "velocity clipped from " << coin.velocity << " to " << clippedVelocity << std::endl;
+        coin.velocity = clippedVelocity;
+//        coin.position = clipPosition(coin.position, clippedVelocity);
+        coin.position = coin.position + clippedVelocity;
       }
       else {
-        if (recursion > 5) {
-          coin.velocity = {0.0, 0.0};
-          return;
-        }
-        mCurrentLine = nearestLine;
-        float lineDx = (nearestLine.polygon->points[nearestLine.pointIndex+1]->x - nearestLine.polygon->points[nearestLine.pointIndex]->x);
-        float lineDy = (nearestLine.polygon->points[nearestLine.pointIndex+1]->y - nearestLine.polygon->points[nearestLine.pointIndex]->y);
-        float lineLen = sqrt(lineDx*lineDx + lineDy*lineDy);
-        float scal = scalarMult(coin.velocity, Point(lineDx, lineDy));
-        float magn = scal / (lineDx*lineDx + lineDy*lineDy);
-        coin.velocity = Point(lineDx, lineDy) * magn;
-
-        coin.sliding = true;
-        applyVelocity(coin, recursion+1); // after adjustment, try again
+        coin.onGround = false;
       }
     }
 
-    float getJoyValue() {
-      // std::cout << "input:   " << joy_x;
-      int reduced = joy_x / 1024;
-      // std::cout << "reduced: " << reduced << std::endl;
-      float scaled = reduced / 30.0;
-      // std::cout << "scaled:  " << scaled << std::endl;
-      if (scaled > 1.0) {
-        scaled = 1.0;
-      }
-      if (scaled < -1.0) {
-        scaled = -1.0;
-      }
-      // std::cout << "clamped: " << scaled << std::endl;
-      return scaled;
+    void clipAcceleration(Coin& coin, int recursion = 0) {
+    //  coin.acceleration = clip(coin.position, coin.acceleration);
     }
 
     void updateCoin(Coin& coin) {
-      if (std::fabs(coin.velocity.y) < GRAVITY_MAX) {
-        coin.velocity.y += GRAVITY;
+      coin.acceleration = {0.0, 0.0};
+      if (jumpKey) {
+        coin.jump = true;
       }
-      float joyValue = getJoyValue();
-      coin.velocity.x += joyValue * 0.03;
+      if (coin.onGround && coin.jump) {
+        coin.acceleration.y = -GRAVITY_MAX*33;
+        coin.jump = false;
+      }
+      else {
+        coin.acceleration.y = GRAVITY_MAX;
+      }
+      if (rightKey) {
+        coin.acceleration.x = +0.035;
+      }
+      else if (leftKey) {
+        coin.acceleration.x = -0.035;
+      }
+      else {
+        float joyValue = getJoyValue();
+        coin.acceleration.x = joyValue * 0.03;
+      }
+      clipAcceleration(coin);
       applyVelocity(coin);
     }
 
@@ -471,6 +620,11 @@ class Editor {
         updateCoin(*coin);
       }
     }
+
+
+// Drawing
+///////////////////
+
 
     void drawPoint(const Point& point) {
       static const int SIZE = POINT_SIZE;
@@ -501,6 +655,17 @@ class Editor {
           }
           prim.drawLine(polygon.points[i]->x, polygon.points[i]->y,
                         polygon.points[i+1]->x, polygon.points[i+1]->y);
+          {
+            Point v = *polygon.points[i] - *polygon.points[i+1];
+            Point vn = v / len(v);
+            Point n(vn.y, -vn.x);
+            prim.drawLine(
+                          (polygon.points[i]->x + polygon.points[i+1]->x) / 2.0,
+                          (polygon.points[i]->y + polygon.points[i+1]->y) / 2.0,
+                          (polygon.points[i]->x + polygon.points[i+1]->x) / 2.0 + n.x*10,
+                          (polygon.points[i]->y + polygon.points[i+1]->y) / 2.0 + n.y*10
+                          );
+          }
         }
       }
     }
@@ -528,10 +693,12 @@ class Editor {
         }
         //coinImage.drawSpriteRotated(coin->position.x+scrollX, coin->position.y+scrollY, 0, coin->rotation);
         coinImage.drawSpriteRotated(screen_w / 2, screen_h /2, 0, coin->rotation);
-        prim.drawLine(coin->position.x, coin->position.y,
-                      coin->position.x + coin->velocity.x * 30,
-                      coin->position.y + coin->velocity.y * 30
-            );
+        if (!drawFilledPolygons) {
+          prim.drawLine(coin->position.x, coin->position.y,
+                        coin->position.x + coin->velocity.x * 30,
+                        coin->position.y + coin->velocity.y * 30
+              );
+        }
       }
 
 //      float r = findNearestLine(mX, mY);
@@ -561,6 +728,9 @@ class Editor {
     int scrollStartY;
     int mX;
     int mY;
+    bool leftKey = false;
+    bool rightKey = false;
+    bool jumpKey = false;
 };
 
 
@@ -577,6 +747,10 @@ void key_press(bool pressed, unsigned char key, unsigned short code) {
 
 void mouse_button(bool pressed, int button, int x, int y ) {
   editor->mouseButton(pressed, button);
+}
+
+void joy_button(bool pressed, int button) {
+  editor->joyButton(pressed, button);
 }
 
 bool gameLoop() {
