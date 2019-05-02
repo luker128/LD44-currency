@@ -268,14 +268,26 @@ SDL_Window* sdlWindow;
 void createWindow(int w, int h, const char* name) {
   screen_w = w;
   screen_h = h;
-  SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
+  int sdl = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
+  if (sdl != 0) {
+    std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
+  }
   sdlWindow = SDL_CreateWindow(name,SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED, screen_w, screen_h, SDL_WINDOW_OPENGL);
+  if (sdlWindow == NULL) {
+    std::cout << "Error creating SDL window: " << SDL_GetError() << std::endl;
+  }
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
   SDL_GLContext context = SDL_GL_CreateContext(sdlWindow);
   if (context == NULL) {
-    std::cout << "Error creating context" << std::endl;
+    std::cout << "Error creating context: " << SDL_GetError() << std::endl;
+    std::cout << "Falling back to default context attributes" << std::endl;
+    SDL_GL_ResetAttributes();
+    context = SDL_GL_CreateContext(sdlWindow);
+    if (context == NULL) {
+      std::cout << "Error creating context: " << SDL_GetError() << std::endl;
+    }
   }
   init_controller();
 }

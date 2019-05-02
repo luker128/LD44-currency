@@ -15,32 +15,13 @@
 #include "gfx.h"
 
 
+
+
 struct Point {
   float x;
   float y;
   Point(float x, float y) : x(x), y(y) {}
 };
-
-struct Coin {
-  Point position;
-  Point velocity;
-  Point acceleration;
-  float rotation = 0.0;
-  bool jump = false;
-  bool onGround = false;
-  Coin(int x, int y) : position(x, y), velocity(0, 0), acceleration(0, 0) {}
-};
-
-const int COIN_SIZE = 32;
-const int POINT_SIZE = 3;
-const float GRAVITY = 0.1;
-const float GRAVITY_MAX = 0.1;
-
-struct Polygon {
-  std::vector<Point*> points;
-  int textureId;
-};
-//typedef std::vector<Point*> Polygon;
 
 float scalarMult(const Point& a, const Point& b) {
   return a.x * b.x + a.y * b.y;
@@ -88,6 +69,41 @@ float sign(float a) {
   }
   return 0.0;
 }
+
+struct Line {
+  Point a;
+  Point b;
+  Line(const Point& a, const Point& b) : a(a), b(b) {}
+  Point getVector() { return b-a; }
+};
+
+struct Polygon {
+  std::vector<Point*> points;
+  int textureId;
+  std::vector<Line> getLines() {
+    std::vector<Line> lines;
+    for (size_t i=0; i+1<points.size(); i++) {
+      lines.push_back(Line(*(points[i]), *(points[i+1])));
+    }
+    return lines;
+  }
+};
+
+
+struct Coin {
+  Point position;
+  Point velocity;
+  Point acceleration;
+  float rotation = 0.0;
+  bool jump = false;
+  bool onGround = false;
+  Coin(int x, int y) : position(x, y), velocity(0, 0), acceleration(0, 0) {}
+};
+
+const int COIN_SIZE = 32;
+const int POINT_SIZE = 3;
+const float GRAVITY = 0.1;
+const float GRAVITY_MAX = 0.1;
 
 class Editor {
 
@@ -501,16 +517,6 @@ class Editor {
 
 // Physics
 ///////////////////
-
-/*
-    void applyVelocity_old(Coin& coin, int recursion = 0) {
-      float newX = coin.position.x + coin.velocity.x;
-      float newY = coin.position.y + coin.velocity.y;
-      float lineDistance;
-      LineInPoly nearestLine;
-      std::tie(lineDistance, nearestLine)  = findNearestLine(newX, newY);
-     }
-*/
 
     Point clip(const Point& position, const Point& velocity, int recursion=0) {
       float lineDistance;

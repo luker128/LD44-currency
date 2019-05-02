@@ -23,7 +23,7 @@ GLuint createShader(GLuint type, const std::string &source) {
   GLint isCompiled;
   glGetShaderiv(shader, GL_COMPILE_STATUS, &isCompiled);
   if (isCompiled == GL_FALSE) {
-    char buf[1024];
+    char buf[1024] = {0};
     glGetShaderInfoLog(shader, sizeof(buf), NULL, buf);
     std::cout << "Shader compilation failed" << std::endl << buf << std::endl;
   }
@@ -40,7 +40,7 @@ GLuint createProgram(const std::string &vertexShaderSource, const std::string &f
   GLint isLinked;
   glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
   if (isLinked == GL_FALSE) {
-    char buf[1024];
+    char buf[1024] = {0};
     glGetProgramInfoLog(program, sizeof(buf), NULL, buf);
     std::cout << "Shader linking failed" << std::endl << buf << std::endl;
   }
