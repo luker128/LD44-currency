@@ -27,6 +27,12 @@ float scalarMult(const Point& a, const Point& b) {
   return a.x * b.x + a.y * b.y;
 }
 
+#define dot scalarMult
+
+float operator*(const Point& a, const Point& b) {
+  return dot(a, b);
+}
+
 Point operator*(const Point& v, float s) {
   return Point(v.x * s, v.y * s);
 }
@@ -60,6 +66,14 @@ bool operator!=(const Point& a, const Point& b) {
   return a.x != b.x || a.y != b.y; // TODO: use epsilon
 }
 
+Point normalize(const Point& v) {
+  return v / len(v);
+}
+
+Point perpendicular(const Point& v) {
+  // return Point(-v.y, -v.x);
+  return Point(-v.y, v.x);
+}
 float sign(float a) {
   if (a > 0.0) {
     return +1.0;
@@ -73,6 +87,7 @@ float sign(float a) {
 struct Line {
   Point a;
   Point b;
+  Line(): a(0,0), b(0,0) {} 
   Line(const Point& a, const Point& b) : a(a), b(b) {}
   Point getVector() { return b-a; }
 };
@@ -174,8 +189,12 @@ class Editor {
     bool gameLoop() {
       mX = mouse_x - scrollX;
       mY = mouse_y - scrollY;
-      update();
-      draw();
+      static int delay = 0;
+//      if ((++delay)%10==0)
+      {
+        draw();
+        update();
+      }
       return true;
     }
 
@@ -450,66 +469,6 @@ class Editor {
       return nullptr;
     }
 
-    float distanceToLine(float x, float y, Point* a, Point* b) {
-      float dy = (b->y - a->y);
-      float dx = (b->x - a->x);
-
-      float direction = dy/dx;
-      float position = a->y - direction*a->x;
-      float A = -direction;
-      //float B = 1; // or 0 if dx == 0?
-      float B = (dx == 0)? 0 : 1;
-      float C = -position;
-      float dist = fabs(A*x + B*y + C) / sqrt(A*A+B*B);
-
-      // czy punkty styku z prostą leży na odcinku?
-      float lenC = sqrt(dx*dx + dy*dy);
-      float lenA = sqrt( (a->x-x)*(a->x-x) + (a->y-y)*(a->y-y) );
-      float lenB = sqrt( (b->x-x)*(b->x-x) + (b->y-y)*(b->y-y) );
-      if (lenA > lenC || lenB > lenC) {
-        if (lenA*lenA > lenB*lenB + lenC*lenC ||
-            lenB*lenB > lenA*lenA + lenC*lenC) {
-          if (lenA < lenB) {
-            return lenA;
-          }
-          else {
-            return lenB;
-          }
-        }
-      }
-      return dist;
-    }
-
-    struct LineInPoly {
-      Polygon* polygon;
-      size_t pointIndex;
-      Point vector() {
-        float lineDx = (polygon->points[pointIndex+1]->x - polygon->points[pointIndex]->x);
-        float lineDy = (polygon->points[pointIndex+1]->y - polygon->points[pointIndex]->y);
-        return Point(lineDx, lineDy);
-      }
-    };
-
-    std::tuple<float, LineInPoly> findNearestLine(const Point& p) {
-      // std::cout << "finding line nearest to " << x << ", " << y << std::endl;
-      float min = FLT_MAX;
-      LineInPoly nearestLine = {nullptr, 0};
-      for (Polygon* polygon: polygons) {
-        for (size_t i=0; i+1<polygon->points.size(); i++) {
-          if (sideOfLine(p.x, p.y, polygon->points[i], polygon->points[i+1])) {
-            continue;
-          }
-          float distance = distanceToLine(p.x, p.y, polygon->points[i], polygon->points[i+1]);
-          if (distance < min) {
-            min = distance;
-            nearestLine = {polygon, i};
-          }
-        }
-      }
-      return std::make_tuple(min, nearestLine);
-    }
-
-
     Point project(Point what, Point where) {
       float magn = scalarMult(what, where) / len2(where);
       return where * magn;
@@ -518,71 +477,69 @@ class Editor {
 // Physics
 ///////////////////
 
-    Point clip(const Point& position, const Point& velocity, int recursion=0) {
-      float lineDistance;
-      LineInPoly nearestLine;
-      std::tie(lineDistance, nearestLine)  = findNearestLine(position + velocity);
-      if (lineDistance < COIN_SIZE) {
-        if (recursion > 5) {
-          return velocity;
+    float lineIntersection(const Point& p0, const Point& v, const Point& pa, const Point& pb) {
+      Point n = normalize(perpendicular(pb - pa));
+      Point o = p0 + (n * COIN_SIZE); // intersection on sphere
+      float t = (n * (pa - o)) / (n * v);
+//      if (t > 0.0 && t <= 1.0) 
+      {
+        Point o2 = o + v * t;
+        float oa = len(o2 - pa);
+        float ob = len(o2 - pb);
+        float ab = len(pb - pa);
+        if (oa < ab && ob < ab) {
+          return t;
         }
-        Point line = nearestLine.vector();
-        Point newVelocity = project(velocity, line);
-        return clip(position, newVelocity, recursion+1);
       }
-      return velocity;
+      return FLT_MAX;
     }
 
-    bool willClip(const Point& position) {
-      float lineDistance;
-      LineInPoly nearestLine;
-      std::tie(lineDistance, nearestLine)  = findNearestLine(position);
-      return lineDistance < (COIN_SIZE);
+    std::tuple<Point, Point> calculate(const Point& p0, const Point& v) {
+      std::cout << "Moving with v = " << v << std::endl;
+      float minT = FLT_MAX;
+      Line minLine;
+      for (Polygon* polygon: polygons) {
+        auto lines = polygon->getLines();
+        for (auto& line: lines) {
+          float t = lineIntersection(p0, v, line.a, line.b);
+
+/*          Point c = p0+v*t;
+          prim.drawCircleOutline(c.x, c.y, 32);
+*/
+          if (t < minT && t >= 0.0) {
+//            std::cout << t << std::endl;
+            minT = t;
+            minLine = line;
+          }
+        }
+      }
+      if (minT >= 0.0 && minT <= 1.0) {
+        static const float epsilon = 0.0001;
+        static const float almostOne = 1.0 - epsilon;
+        Point newP = p0 + v * (minT*almostOne);
+        Point newV = project(v*(1.0-minT), (minLine.a - minLine.b));
+        std::cout << "Collision! new v = " << newV << std::endl;
+          /*
+          prim.setColor(0,1,0,1);
+          prim.drawLine(coin->position.x, coin->position.y,
+                        coin->position.x + newV.x * 300,
+                        coin->position.y + newV.y * 300
+              );
+          prim.setColor(1,1,1,1);
+          */
+        return calculate(newP, newV);
+        //return std::make_tuple(newP + newV, newV);
+      }
+      return std::make_tuple(p0 + v, v);
     }
 
-    Point clipPosition(const Point& position, const Point& velocity) {
-      // std::cout << "checking position clip: position " << position << " velocity " << velocity << std::endl;
-      float distance = len(velocity);
-      Point direction = velocity / distance;
-      Point pos = position;
-      float step = 0.1;
-      for (float f=0; f<distance; f+=step) {
-        Point newPos = pos + direction * step;
-        //std::cout << "Any polygons at " << (newPos + direction*COIN_SIZE) << "?" << std::endl;
-        if (willClip(newPos)) {
-          //std::cout << "clipping position " << position << " with velocity " << velocity << " to " << pos << std::endl;
-          return pos;
-        }
-        pos = newPos;
-      }
-      //std::cout << "final check for clipping. position " << position << " velocity " << velocity << " is polygon at " << (position + velocity + direction*COIN_SIZE) << "?" << std::endl;
-      if (willClip(position + velocity)) {
-        //std::cout << "clipping position " << position << " with velocity " << velocity << " to original" << std::endl;
-        return position;
-      }
-      //std::cout << "position unclipped " << position << " + " << velocity << " = " << (position + velocity) << std::endl;
-      return position + velocity;
-    }
 
     void applyVelocity(Coin& coin) {
       coin.velocity = coin.velocity + coin.acceleration;
-      Point clippedVelocity = clip(coin.position, coin.velocity);
-      Point clippedPosition = clipPosition(coin.position, coin.velocity);
-      coin.position = clippedPosition;
-      if (coin.velocity != clippedVelocity) {
-        coin.onGround = true;
-        //std::cout << "velocity clipped from " << coin.velocity << " to " << clippedVelocity << std::endl;
-        coin.velocity = clippedVelocity;
-//        coin.position = clipPosition(coin.position, clippedVelocity);
-        coin.position = coin.position + clippedVelocity;
-      }
-      else {
-        coin.onGround = false;
-      }
+      std::tie(coin.position, coin.velocity) = calculate(coin.position, coin.velocity);
     }
 
     void clipAcceleration(Coin& coin, int recursion = 0) {
-    //  coin.acceleration = clip(coin.position, coin.acceleration);
     }
 
     void updateCoin(Coin& coin) {
@@ -653,12 +610,7 @@ class Editor {
           drawPoint(*point);
         }
         for (size_t i=0; (i+1)<polygon.points.size(); i++) {
-          if (mCurrentLine.polygon == &polygon && mCurrentLine.pointIndex == i) {
-            prim.setColor(1,0,0,1);
-          }
-          else {
             prim.setColor(1,1,1,1);
-          }
           prim.drawLine(polygon.points[i]->x, polygon.points[i]->y,
                         polygon.points[i+1]->x, polygon.points[i+1]->y);
           {
@@ -699,16 +651,13 @@ class Editor {
         }
         //coinImage.drawSpriteRotated(coin->position.x+scrollX, coin->position.y+scrollY, 0, coin->rotation);
         coinImage.drawSpriteRotated(screen_w / 2, screen_h /2, 0, coin->rotation);
-        if (!drawFilledPolygons) {
+   //     if (!drawFilledPolygons) {
           prim.drawLine(coin->position.x, coin->position.y,
                         coin->position.x + coin->velocity.x * 30,
                         coin->position.y + coin->velocity.y * 30
               );
-        }
+//        }
       }
-
-//      float r = findNearestLine(mX, mY);
-//      prim.drawCircleOutline(mX, mY, r);
     }
 
     void spawnCoin(int x, int y) {
@@ -725,7 +674,6 @@ class Editor {
     Polygon* newPolygon = nullptr;
     std::vector<Polygon*> polygons;
     Point* currentPoint = nullptr;
-    LineInPoly mCurrentLine;
     std::vector<Image> textures;
     float scrollX = 0;
     float scrollY = 0;
