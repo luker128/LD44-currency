@@ -18,34 +18,34 @@
 
 
 struct Point {
-  float x;
-  float y;
-  Point(float x, float y) : x(x), y(y) {}
+  double x;
+  double y;
+  Point(double x, double y) : x(x), y(y) {}
 };
 
-float scalarMult(const Point& a, const Point& b) {
+double scalarMult(const Point& a, const Point& b) {
   return a.x * b.x + a.y * b.y;
 }
 
 #define dot scalarMult
 
-float operator*(const Point& a, const Point& b) {
+double operator*(const Point& a, const Point& b) {
   return dot(a, b);
 }
 
-Point operator*(const Point& v, float s) {
+Point operator*(const Point& v, double s) {
   return Point(v.x * s, v.y * s);
 }
 
-Point operator/(const Point& v, float s) {
+Point operator/(const Point& v, double s) {
   return Point(v.x / s, v.y / s);
 }
 
-float len(const Point& v) {
+double len(const Point& v) {
   return sqrt(v.x*v.x + v.y*v.y);
 }
 
-float len2(const Point& v) {
+double len2(const Point& v) {
   return v.x*v.x + v.y*v.y;
 }
 
@@ -74,7 +74,7 @@ Point perpendicular(const Point& v) {
   // return Point(-v.y, -v.x);
   return Point(-v.y, v.x);
 }
-float sign(float a) {
+double sign(double a) {
   if (a > 0.0) {
     return +1.0;
   }
@@ -109,7 +109,7 @@ struct Coin {
   Point position;
   Point velocity;
   Point acceleration;
-  float rotation = 0.0;
+  double rotation = 0.0;
   bool jump = false;
   bool onGround = false;
   Coin(int x, int y) : position(x, y), velocity(0, 0), acceleration(0, 0) {}
@@ -117,8 +117,8 @@ struct Coin {
 
 const int COIN_SIZE = 32;
 const int POINT_SIZE = 3;
-const float GRAVITY = 0.1;
-const float GRAVITY_MAX = 0.1;
+const double GRAVITY = 0.1;
+const double GRAVITY_MAX = 0.1;
 
 class Editor {
 
@@ -292,11 +292,11 @@ class Editor {
       }
     }
 
-    float getJoyValue() {
+    double getJoyValue() {
       // std::cout << "input:   " << joy_x;
       int reduced = joy_x / 1024;
       // std::cout << "reduced: " << reduced << std::endl;
-      float scaled = reduced / 30.0;
+      double scaled = reduced / 30.0;
       // std::cout << "scaled:  " << scaled << std::endl;
       if (scaled > 1.0) {
         scaled = 1.0;
@@ -417,12 +417,12 @@ class Editor {
       return nullptr;
     }
 
-    bool sideOfLine(float x, float y, Point* a, Point* b) {
+    bool sideOfLine(double x, double y, Point* a, Point* b) {
       // std::cout << "checking side " << x << ", " << y << " of line "
       //   << a->x << ", " << a->y << " - " << b->x << ", " << b->y;
 
-      float dy = (b->y - a->y);
-      float dx = (b->x - a->x);
+      double dy = (b->y - a->y);
+      double dx = (b->x - a->x);
       if (dx == 0) {
         if (a->y > b->y) {
           return x > a->x;
@@ -431,8 +431,8 @@ class Editor {
           return x < a->x;
         }
       }
-      float direction = dy/dx;
-      float position = a->y - direction*a->x;
+      double direction = dy/dx;
+      double position = a->y - direction*a->x;
 
       bool relation = y > direction*x + position;
       // std::cout << std::endl << "direction = " << dx << std::endl;
@@ -448,7 +448,7 @@ class Editor {
       }
     }
 
-    bool isInPolygon(float x, float y, const Polygon& poly) {
+    bool isInPolygon(double x, double y, const Polygon& poly) {
       // std::cout << "checking if " << x << ", " << y << " is in polygon" << std::endl;
       for (size_t i=0; i+1<poly.points.size(); i++) {
         bool side = sideOfLine(x, y, poly.points[i], poly.points[i+1]);
@@ -460,7 +460,7 @@ class Editor {
     }
 
     Polygon* getPolygonAt(const Point& p) { return getPolygonAt(p.x, p.y); }
-    Polygon* getPolygonAt(float x, float y) {
+    Polygon* getPolygonAt(double x, double y) {
       for (Polygon* polygon: polygons) {
         if (isInPolygon(x, y, *polygon)) {
           return polygon;
@@ -470,23 +470,23 @@ class Editor {
     }
 
     Point project(Point what, Point where) {
-      float magn = scalarMult(what, where) / len2(where);
+      double magn = scalarMult(what, where) / len2(where);
       return where * magn;
     }
 
 // Physics
 ///////////////////
 
-    float lineIntersection(const Point& p0, const Point& v, const Point& pa, const Point& pb) {
+    double lineIntersection(const Point& p0, const Point& v, const Point& pa, const Point& pb) {
       Point n = normalize(perpendicular(pb - pa));
       Point o = p0 + (n * COIN_SIZE); // intersection on sphere
-      float t = (n * (pa - o)) / (n * v);
+      double t = (n * (pa - o)) / (n * v);
 //      if (t > 0.0 && t <= 1.0) 
       {
         Point o2 = o + v * t;
-        float oa = len(o2 - pa);
-        float ob = len(o2 - pb);
-        float ab = len(pb - pa);
+        double oa = len(o2 - pa);
+        double ob = len(o2 - pb);
+        double ab = len(pb - pa);
         if (oa < ab && ob < ab) {
           return t;
         }
@@ -496,12 +496,12 @@ class Editor {
 
     std::tuple<Point, Point> calculate(const Point& p0, const Point& v) {
       std::cout << "Moving with v = " << v << std::endl;
-      float minT = FLT_MAX;
+      double minT = FLT_MAX;
       Line minLine;
       for (Polygon* polygon: polygons) {
         auto lines = polygon->getLines();
         for (auto& line: lines) {
-          float t = lineIntersection(p0, v, line.a, line.b);
+          double t = lineIntersection(p0, v, line.a, line.b);
 
 /*          Point c = p0+v*t;
           prim.drawCircleOutline(c.x, c.y, 32);
@@ -513,10 +513,11 @@ class Editor {
           }
         }
       }
-      if (minT >= 0.0 && minT <= 1.0) {
-        static const float epsilon = 0.0001;
-        static const float almostOne = 1.0 - epsilon;
-        Point newP = p0 + v * (minT*almostOne);
+      static const double epsilon = 0.1;
+      static const double almostOne = 1.0 - epsilon;
+      minT = minT - epsilon;
+      if (minT <= 1.0) {
+        Point newP = p0 + v * minT;
         Point newV = project(v*(1.0-minT), (minLine.a - minLine.b));
         std::cout << "Collision! new v = " << newV << std::endl;
           /*
@@ -530,13 +531,21 @@ class Editor {
         return calculate(newP, newV);
         //return std::make_tuple(newP + newV, newV);
       }
-      return std::make_tuple(p0 + v, v);
+      return std::make_tuple(p0, v);
     }
 
 
+    Point clipVelocity(const Point& p0, const Point& v) {
+      Point newP(0,0);
+      Point newV(0,0);
+      std::tie(newP, newV) = calculate(p0, v);
+      return (newP + newV) - p0;
+    }
+
     void applyVelocity(Coin& coin) {
-      coin.velocity = coin.velocity + coin.acceleration;
-      std::tie(coin.position, coin.velocity) = calculate(coin.position, coin.velocity);
+      Point v = coin.velocity + coin.acceleration;
+      coin.velocity = clipVelocity(coin.position, v);
+      coin.position = coin.position + coin.velocity;
     }
 
     void clipAcceleration(Coin& coin, int recursion = 0) {
@@ -561,7 +570,7 @@ class Editor {
         coin.acceleration.x = -0.035;
       }
       else {
-        float joyValue = getJoyValue();
+        double joyValue = getJoyValue();
         coin.acceleration.x = joyValue * 0.03;
       }
       clipAcceleration(coin);
@@ -675,8 +684,8 @@ class Editor {
     std::vector<Polygon*> polygons;
     Point* currentPoint = nullptr;
     std::vector<Image> textures;
-    float scrollX = 0;
-    float scrollY = 0;
+    double scrollX = 0;
+    double scrollY = 0;
     bool scrolling = false;
     int scrollStartX;
     int scrollStartY;
