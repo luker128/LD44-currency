@@ -469,20 +469,19 @@ class Editor {
       return nullptr;
     }
 
+// Physics
+///////////////////
+
     Point project(Point what, Point where) {
       double magn = scalarMult(what, where) / len2(where);
       return where * magn;
     }
 
-// Physics
-///////////////////
-
     double lineIntersection(const Point& p0, const Point& v, const Point& pa, const Point& pb) {
       Point n = normalize(perpendicular(pb - pa));
       Point o = p0 + (n * COIN_SIZE); // intersection on sphere
       double t = (n * (pa - o)) / (n * v);
-//      if (t > 0.0 && t <= 1.0) 
-      {
+      if (t >= 0.0 && t <= 1.0) {
         Point o2 = o + v * t;
         double oa = len(o2 - pa);
         double ob = len(o2 - pb);
@@ -494,51 +493,33 @@ class Editor {
       return FLT_MAX;
     }
 
-    std::tuple<Point, Point> calculate(const Point& p0, const Point& v) {
-      std::cout << "Moving with v = " << v << std::endl;
+    std::tuple<Point, Point> checkCollisions(const Point& p0, const Point& v) {
       double minT = FLT_MAX;
       Line minLine;
       for (Polygon* polygon: polygons) {
         auto lines = polygon->getLines();
         for (auto& line: lines) {
           double t = lineIntersection(p0, v, line.a, line.b);
-
-/*          Point c = p0+v*t;
-          prim.drawCircleOutline(c.x, c.y, 32);
-*/
           if (t < minT && t >= 0.0) {
-//            std::cout << t << std::endl;
             minT = t;
             minLine = line;
           }
         }
       }
-      static const double epsilon = 0.1;
-      static const double almostOne = 1.0 - epsilon;
+      static const double epsilon = 0.1; // !!
       minT = minT - epsilon;
       if (minT <= 1.0) {
         Point newP = p0 + v * minT;
         Point newV = project(v*(1.0-minT), (minLine.a - minLine.b));
-        std::cout << "Collision! new v = " << newV << std::endl;
-          /*
-          prim.setColor(0,1,0,1);
-          prim.drawLine(coin->position.x, coin->position.y,
-                        coin->position.x + newV.x * 300,
-                        coin->position.y + newV.y * 300
-              );
-          prim.setColor(1,1,1,1);
-          */
-        return calculate(newP, newV);
-        //return std::make_tuple(newP + newV, newV);
+        return checkCollisions(newP, newV);
       }
       return std::make_tuple(p0, v);
     }
 
-
     Point clipVelocity(const Point& p0, const Point& v) {
       Point newP(0,0);
       Point newV(0,0);
-      std::tie(newP, newV) = calculate(p0, v);
+      std::tie(newP, newV) = checkCollisions(p0, v);
       return (newP + newV) - p0;
     }
 
@@ -546,9 +527,6 @@ class Editor {
       Point v = coin.velocity + coin.acceleration;
       coin.velocity = clipVelocity(coin.position, v);
       coin.position = coin.position + coin.velocity;
-    }
-
-    void clipAcceleration(Coin& coin, int recursion = 0) {
     }
 
     void updateCoin(Coin& coin) {
@@ -573,7 +551,6 @@ class Editor {
         double joyValue = getJoyValue();
         coin.acceleration.x = joyValue * 0.03;
       }
-      clipAcceleration(coin);
       applyVelocity(coin);
     }
 
