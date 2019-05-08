@@ -1,23 +1,41 @@
 PROJECT = currency_editor
-CC = g++
+CXX = g++
 EMCC = emcc
-SRC = *.cpp
+SRC = $(wildcard *.cpp)
+OBJ = $(SRC:.cpp=.o)
 INC = *.h
+DEPFILE = deps
+CXXFLAGS= -O2 -std=c++11 #-Wall -Wextra
+WEB_TARGET = html/game.js
+WEB_LDFLAGS = -s USE_WEBGL2=1 -s ALLOW_MEMORY_GROWTH=1 --preload-file data --no-heap-copy #-lopenal
+NATIVE_LDFLAGS = -lSDL2 -lGL -lGLU #-lopenal
 
-.PHONY: native
-.PHONY: run
-.PHONY: all
-.PHONY: web
+.PHONY: native run all web clean
 
-all: run
-
-web:
-	$(EMCC) -std=c++11 $(SRC) -O2 -s USE_WEBGL2=1 -s ALLOW_MEMORY_GROWTH=1 --preload-file data -o html/game.html
-#	$(EMCC) main.cpp -O2 -s TOTAL_MEMORY=67108864 -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s USE_SDL_TTF=2 -s SDL2_IMAGE_FORMATS='["png"]' --preload-file assets -o sdl_hello.js
-
-native: $(PROJECT)
-$(PROJECT): $(SRC) $(INC)
-	$(CC) -g $(SRC) -O2 -lSDL2 -lGL -lGLU -o $@
+all: web
 
 run: native
 	./$(PROJECT)
+
+web: CXX=emcc
+web: $(WEB_TARGET)
+
+native: $(PROJECT)
+
+clean:
+	rm -f *.o deps html/game.* $(PROJECT)
+
+%.o: %.cpp
+	$(CXX) -c $(CXXFLAGS) $< -o $@
+
+$(WEB_TARGET): $(OBJ)
+	$(CXX) $(OBJ) $(WEB_LDFLAGS) -o $@
+
+$(PROJECT): $(OBJ)
+	$(CXX) $(OBJ) $(NATIVE_LDFLAGS) -o $@
+
+.PHONY: $(DEPFILE)
+$(DEPFILE):
+	$(CXX) -MM $(SRC) > $(DEPFILE)
+
+include $(DEPFILE)

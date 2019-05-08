@@ -108,6 +108,23 @@ EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *user
 }
 
 
+EM_BOOL mousedown_callback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData) {
+  mouse_button(true, mouseEvent->button, mouseEvent->canvasX, mouseEvent->canvasY);
+  return true;
+}
+
+EM_BOOL mouseup_callback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData) {
+  mouse_button(false, mouseEvent->button, mouseEvent->canvasX, mouseEvent->canvasY);
+  return true;
+}
+
+EM_BOOL mouse_callback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData) {
+  mouse_x = mouseEvent->canvasX;
+  mouse_y = mouseEvent->canvasY;
+  return true;
+}
+
+
 
 void createWindow(int w, int h, const char* name) {
   screen_w = w;
@@ -126,6 +143,9 @@ void createWindow(int w, int h, const char* name) {
   emscripten_set_keydown_callback(0, 0, 1, key_callback);
   emscripten_set_keyup_callback(0, 0, 1, key_callback);
   emscripten_set_keypress_callback(0, 0, 1, key_callback);
+  emscripten_set_mousemove_callback(0, 0, 1, mouse_callback);
+  emscripten_set_mousedown_callback(0, 0, 1, mousedown_callback);
+  emscripten_set_mouseup_callback(0, 0, 1, mouseup_callback);
 }
 
 void void_processFrame() {

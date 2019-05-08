@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <string>
+#include <set>
 #include <map>
 #include <tuple>
 #include <vector>
@@ -23,11 +24,9 @@ struct Point {
   Point(double x, double y) : x(x), y(y) {}
 };
 
-double scalarMult(const Point& a, const Point& b) {
+double dot(const Point& a, const Point& b) {
   return a.x * b.x + a.y * b.y;
 }
-
-#define dot scalarMult
 
 double operator*(const Point& a, const Point& b) {
   return dot(a, b);
@@ -71,9 +70,9 @@ Point normalize(const Point& v) {
 }
 
 Point perpendicular(const Point& v) {
-  // return Point(-v.y, -v.x);
   return Point(-v.y, v.x);
 }
+
 double sign(double a) {
   if (a > 0.0) {
     return +1.0;
@@ -136,14 +135,19 @@ class Editor {
       //  https://www.deviantart.com/strapaca/art/Fresh-dark-green-gras-seamless-texture-782082733
       textures.emplace_back("data/grass.png");
 
-      drawFilledPolygons = true;
+      drawFilledPolygons = false;
+      drawGrid = true;
+      shouldSnapToGrid = true;
       loadLevel();
-      spawnCoin(200, 100);
+///      spawnCoin(200, 100);
     }
 
     void keyPressEvent(bool pressed, unsigned char key, unsigned short code) {
       if (pressed == true) {
         keyPress(key);
+      }
+      if (key == 229 || key == 225) {
+        shiftKey = pressed;
       }
       if (key == 82 || key == 38) {
         jumpKey = pressed;
@@ -187,8 +191,8 @@ class Editor {
 
 
     bool gameLoop() {
-      mX = mouse_x - scrollX;
-      mY = mouse_y - scrollY;
+      mX = (mouse_x - scrollX);
+      mY = (mouse_y - scrollY);
       static int delay = 0;
 //      if ((++delay)%10==0)
       {
@@ -207,10 +211,31 @@ class Editor {
 
     void mouseDownLeft() {
       if (newPolygon == nullptr) {
-        if (currentPoint == nullptr) {
-          auto p = getPointAt(mX, mY);
-          std::cout << p << std::endl;
-          currentPoint = p;
+        // not creating new polygon
+        Point* p = getPointAt(mX, mY);
+        if (shiftKey) {
+          if (p != nullptr) {
+            if (selectedPoints.count(p) == 0) {
+              selectedPoints.insert(p);
+            }
+          }
+          else {
+            selectingRectangle = true;
+            selectingRectangleStart = Point(mX, mY);
+          }
+        }
+        else {
+          if (p == nullptr) {
+            selectedPoints.clear();
+          }
+          if (p != nullptr) {
+            if (selectedPoints.count(p) == 0 ) {
+              selectedPoints.clear();
+            }
+            selectedPoints.insert(p);
+            draggingPoints = true;
+            draggingStart = Point(mX, mY);
+          }
         }
       }
     }
@@ -219,12 +244,24 @@ class Editor {
         addPointToPolygon(mX, mY, *newPolygon);
       }
       else {
-             if (currentPoint == nullptr) {
-          auto p = getPointAt(mX, mY);
-          std::cout << p << std::endl;
-          currentPoint = p;
+        if (selectingRectangle) {
+          selectingRectangle = false;
+          for (Polygon* polygon: polygons) {
+            for (Point* point: polygon->points) {
+              float rectx0 = std::min(selectingRectangleStart.x, (double)mX);
+              float recty0 = std::min(selectingRectangleStart.y, (double)mY);
+              float rectx1 = std::max(selectingRectangleStart.x, (double)mX);
+              float recty1 = std::max(selectingRectangleStart.y, (double)mY);
+              if (point->x > rectx0 && point->x < rectx1 &&
+                  point->y > recty0 && point->y < recty1) {
+                selectedPoints.insert(point);
+              }
+            }
+          }
         }
-        currentPoint = nullptr;
+        if (draggingPoints == true) {
+          draggingPoints = false;
+        }
       }
     }
 
@@ -248,7 +285,7 @@ class Editor {
 
     void keyPress(int key) {
       std::cout << key << std::endl;
-      if (key == 127) { // delete
+      if (key == 127 || key == 46) { // delete
         delete coin;
         coin = nullptr;
       }
@@ -270,14 +307,14 @@ class Editor {
       if (key == '\r') {
         spawnCoin(mX, mY);
       }
-      if (key == 75) { // pg up
+      if (key == 75 || key == 33) { // pg up
         Polygon* poly = getPolygonAt(mX, mY);
         poly->textureId++;
         if (poly->textureId == textures.size()) {
           poly->textureId = 0;
         }
       }
-      if (key == 78) { // pg dn
+      if (key == 78 || key == 34) { // pg dn
         Polygon* poly = getPolygonAt(mX, mY);
         poly->textureId--;
         if (poly->textureId == -1) {
@@ -473,7 +510,7 @@ class Editor {
 ///////////////////
 
     Point project(Point what, Point where) {
-      double magn = scalarMult(what, where) / len2(where);
+      double magn = (what * where) / len2(where);
       return where * magn;
     }
 
@@ -493,9 +530,37 @@ class Editor {
       return FLT_MAX;
     }
 
+    float pointIntersection(const Point& p0, const Point& v, const Point& pa) {
+      Point q = p0 - pa;
+      float a = v * v;
+      float b = 2.0 * (q * v);
+      float c = (q * q) - COIN_SIZE * COIN_SIZE;
+      float delta = b * b - 4.0 * a * c;
+      if (delta >= 0) {
+        float t1 = (-b + sqrt(delta)) / (2.0 * a);
+        float t2 = (-b - sqrt(delta)) / (2.0 * a);
+        if (t1 >= 0 && t1 <= 1.0) {
+          if (t2 >= 0 && t2 <= 1.0) {
+            if (t2 < t1) {
+              return t2;
+            }
+            else {
+              return t1;
+            }
+          }
+          return t1;
+        }
+        if (t2 >= 0 && t2 <= 1.0) {
+          return t2;
+        }
+      }
+      return FLT_MAX;
+    }
+
     std::tuple<Point, Point> checkCollisions(const Point& p0, const Point& v) {
       double minT = FLT_MAX;
       Line minLine;
+      Point* minPoint = nullptr;
       for (Polygon* polygon: polygons) {
         auto lines = polygon->getLines();
         for (auto& line: lines) {
@@ -503,6 +568,19 @@ class Editor {
           if (t < minT && t >= 0.0) {
             minT = t;
             minLine = line;
+            minPoint = nullptr;
+          }
+          t = pointIntersection(p0, v, line.a);
+          if (t< 1.0 && t < minT) {
+            minT = t;
+            minLine = line;
+            minPoint = &minLine.a;
+          }
+          t = pointIntersection(p0, v, line.b);
+          if (t< 1.0 && t < minT) {
+            minT = t;
+            minLine = line;
+            minPoint = &minLine.b;
           }
         }
       }
@@ -510,7 +588,14 @@ class Editor {
       minT = minT - epsilon;
       if (minT <= 1.0) {
         Point newP = p0 + v * minT;
-        Point newV = project(v*(1.0-minT), (minLine.a - minLine.b));
+        Point slidePlane(0,0);
+        if (minPoint == nullptr) {
+          slidePlane = minLine.a - minLine.b;
+        } else {
+          std::cout << "Point collision" << std::endl;
+          slidePlane = perpendicular(newP - (*minPoint));
+        }
+        Point newV = project(v*(1.0-minT), slidePlane);
         return checkCollisions(newP, newV);
       }
       return std::make_tuple(p0, v);
@@ -542,16 +627,23 @@ class Editor {
         coin.acceleration.y = GRAVITY_MAX;
       }
       if (rightKey) {
-        coin.acceleration.x = +0.035;
+        coin.acceleration.x = +0.036;
       }
       else if (leftKey) {
-        coin.acceleration.x = -0.035;
+        coin.acceleration.x = -0.036;
       }
       else {
         double joyValue = getJoyValue();
         coin.acceleration.x = joyValue * 0.03;
       }
       applyVelocity(coin);
+    }
+
+    Point snapToGrid(const Point& p) {
+      if (shouldSnapToGrid) {
+        return Point(round(p.x/gridSize)*gridSize, round(p.y/gridSize)*gridSize);
+      }
+      return p;
     }
 
     void update() {
@@ -561,9 +653,15 @@ class Editor {
         scrollStartX = mouse_x;
         scrollStartY = mouse_y;
       }
-      if (currentPoint != nullptr) {
-        currentPoint->x = mX;
-        currentPoint->y = mY;
+      if (draggingPoints) {
+        Point mousePosition(mX, mY);
+        mousePosition = snapToGrid(mousePosition);
+        if (snapToGrid(mousePosition - draggingStart) != Point(0,0)) {
+          for (Point* point: selectedPoints) {
+            *point = snapToGrid(*point + (mousePosition - draggingStart));
+          }
+          draggingStart = mousePosition;
+        }
       }
       if (coin != nullptr) {
         updateCoin(*coin);
@@ -593,6 +691,11 @@ class Editor {
       }
       else {
         for (const auto& point: polygon.points) {
+          if (selectedPoints.count(point)) {
+            prim.setColor(0,0,1,1);
+          } else {
+            prim.setColor(1,1,1,1);
+          }
           drawPoint(*point);
         }
         for (size_t i=0; (i+1)<polygon.points.size(); i++) {
@@ -616,6 +719,16 @@ class Editor {
 
     void draw() {
       glClear(GL_COLOR_BUFFER_BIT);
+      if (drawGrid) {
+        prim.setColor((101/255.0)*0.9, (184/255.0)*0.9, (227/225.0)*0.9, 1.0);
+        prim.setColor(0,0,0, 0.06);
+        for (int y=0; y<100; y++) {
+          prim.drawLine(0,gridSize*y, screen_w, gridSize*y);
+        }
+        for (int x=0; x<100; x++) {
+          prim.drawLine(gridSize*x, 0, gridSize*x, screen_h);
+        }
+      }
       if (coin != nullptr) {
         prim.setScroll((screen_w/2)-coin->position.x,
                        (screen_h/2)-coin->position.y);
@@ -637,12 +750,18 @@ class Editor {
         }
         //coinImage.drawSpriteRotated(coin->position.x+scrollX, coin->position.y+scrollY, 0, coin->rotation);
         coinImage.drawSpriteRotated(screen_w / 2, screen_h /2, 0, coin->rotation);
-   //     if (!drawFilledPolygons) {
+        if (!drawFilledPolygons) {
           prim.drawLine(coin->position.x, coin->position.y,
                         coin->position.x + coin->velocity.x * 30,
                         coin->position.y + coin->velocity.y * 30
               );
-//        }
+        }
+      }
+      if (selectingRectangle) {
+        prim.drawLine(selectingRectangleStart.x, selectingRectangleStart.y, mX, selectingRectangleStart.y);
+        prim.drawLine(selectingRectangleStart.x, selectingRectangleStart.y, selectingRectangleStart.x, mY);
+        prim.drawLine(mX, mY, selectingRectangleStart.x, mY);
+        prim.drawLine(mX, mY, mX, selectingRectangleStart.y);
       }
     }
 
@@ -659,7 +778,18 @@ class Editor {
 //    Image terrainImage;
     Polygon* newPolygon = nullptr;
     std::vector<Polygon*> polygons;
-    Point* currentPoint = nullptr;
+//    Point* currentPoint = nullptr;
+
+    std::set<Point*> selectedPoints;
+    bool draggingPoints = false;
+    Point draggingStart = Point(0,0);
+    bool shiftKey = false;
+    Point selectingRectangleStart = Point(0,0);
+    bool selectingRectangle = false;
+    bool drawGrid = false;
+    bool shouldSnapToGrid = false;
+    float gridSize = 10.0;
+
     std::vector<Image> textures;
     double scrollX = 0;
     double scrollY = 0;
