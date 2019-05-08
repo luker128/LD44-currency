@@ -2,7 +2,7 @@ PROJECT = currency_editor
 CXX = g++
 EMCC = emcc
 SRC = $(wildcard *.cpp)
-OBJ = $(SRC:.cpp=.o)
+OBJ = $(SRC:%.cpp=%.o)
 INC = *.h
 DEPFILE = deps
 CXXFLAGS= -O2 -std=c++11 #-Wall -Wextra

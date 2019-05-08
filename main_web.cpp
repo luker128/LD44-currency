@@ -29,14 +29,28 @@ EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *user
     || eventType == EMSCRIPTEN_EVENT_KEYPRESS || eventType == EMSCRIPTEN_EVENT_KEYUP; // Don't perform any default actions on these.
 }
 
+int mapMouseButton(int jsButton) {
+  switch (jsButton) {
+    case 0:
+      return 1;
+    case 1:
+      return 2;
+    case 2:
+      return 3;
+    default:
+      return jsButton;
+  }
+}
 
 EM_BOOL mousedown_callback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData) {
-  mouse_button(true, mouseEvent->button, mouseEvent->canvasX, mouseEvent->canvasY);
+  int button = mapMouseButton(mouseEvent->button);
+  mouse_button(true, button, mouseEvent->canvasX, mouseEvent->canvasY);
   return true;
 }
 
 EM_BOOL mouseup_callback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData) {
-  mouse_button(false, mouseEvent->button, mouseEvent->canvasX, mouseEvent->canvasY);
+  int button = mapMouseButton(mouseEvent->button);
+  mouse_button(false, button, mouseEvent->canvasX, mouseEvent->canvasY);
   return true;
 }
 

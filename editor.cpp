@@ -146,7 +146,7 @@ class Editor {
       if (pressed == true) {
         keyPress(key);
       }
-      if (key == 229 || key == 225) {
+      if (key == 229 || key == 225 || key == 16) {
         shiftKey = pressed;
       }
       if (key == 82 || key == 38) {

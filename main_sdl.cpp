@@ -9,6 +9,7 @@
 #include <SDL2/SDL.h>
 
 SDL_GameController *controller = NULL;
+bool processFrame();
 
 bool keys[SDL_NUM_SCANCODES];
 bool processInput() {
