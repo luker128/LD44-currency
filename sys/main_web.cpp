@@ -4,7 +4,6 @@
 #include <sstream>
 
 #include "main.h"
-#include "lodepng.h"
 
 #include <emscripten.h>
 #include <emscripten/emscripten.h>

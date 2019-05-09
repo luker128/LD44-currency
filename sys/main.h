@@ -12,8 +12,6 @@ extern int joy_y;
 extern bool keys[];
 void createWindow(int w, int h, const char* name);
 int getTick();
-unsigned int load_texture(const char* filename, unsigned int filter, int *out_w, int *out_h, float *out_u, float *out_v);
-void destroy_texture(unsigned int texture);
 
 // Imports - to bo impelemnnted by game
 void gameInit();

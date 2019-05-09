@@ -5,7 +5,6 @@
 #include <sstream>
 
 #include "main.h"
-#include "lodepng.h"
 #include <SDL2/SDL.h>
 
 SDL_GameController *controller = NULL;

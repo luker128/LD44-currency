@@ -4,6 +4,9 @@
 
 class string;
 
+unsigned int load_texture(const char* filename, unsigned int filter, int *out_w, int *out_h, float *out_u, float *out_v);
+void destroy_texture(unsigned int texture);
+
 class Image {
   public:
     Image(const std::string &filename);

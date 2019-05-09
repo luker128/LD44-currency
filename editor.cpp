@@ -1,5 +1,4 @@
 #include <float.h>
-#include <vector>
 #include <GLES3/gl3.h>
 #include <cmath>
 #include <cstdlib>
@@ -11,11 +10,9 @@
 #include <sstream>
 #include <iostream>
 #include <fstream>
-#include "main.h"
-#include "primitive.h"
-#include "gfx.h"
-
-
+#include "sys/main.h"
+#include "gfx/primitive.h"
+#include "gfx/gfx.h"
 
 
 struct Point {
