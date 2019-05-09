@@ -1,0 +1,4 @@
+*.o
+*.d
+html/game.*
+run.sh

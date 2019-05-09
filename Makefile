@@ -3,8 +3,8 @@ CXX = g++
 EMCC = emcc
 SRC = $(wildcard *.cpp) $(wildcard sys/*.cpp) $(wildcard gfx/*.cpp)
 OBJ = $(SRC:%.cpp=%.o)
+DEPFILES = $(SRC:%.cpp=%.d)
 INC = *.h
-DEPFILE = deps
 CXXFLAGS= -O2 -std=c++11 -Isys #-Wall -Wextra
 WEB_TARGET = html/game.js
 WEB_LDFLAGS = -s USE_WEBGL2=1 -s ALLOW_MEMORY_GROWTH=1 --preload-file data --no-heap-copy #-lopenal
@@ -23,7 +23,7 @@ web: $(WEB_TARGET)
 native: $(PROJECT)
 
 clean:
-	rm -f $(OBJ) $(DEPFILE) html/game.* $(PROJECT)
+	rm -f $(OBJ) $(DEPFILES) html/game.* $(PROJECT)
 
 %.o: %.cpp
 	$(CXX) -c $(CXXFLAGS) $< -o $@
@@ -34,8 +34,8 @@ $(WEB_TARGET): $(OBJ)
 $(PROJECT): $(OBJ)
 	$(CXX) $(OBJ) $(NATIVE_LDFLAGS) -o $@
 
-.PHONY: $(DEPFILE)
-$(DEPFILE):
-	$(CXX) -MM $(CXXFLAGS) $(SRC) > $(DEPFILE)
+.PHONY: $(DEPFILES)
+$(DEPFILES):
+	$(CXX) -MM $(CXXFLAGS) $(@:%.d=%.cpp) -MT $(@:%.d=%.o) > $@
 
-include $(DEPFILE)
+include $(DEPFILES)
