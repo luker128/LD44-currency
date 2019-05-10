@@ -25,7 +25,7 @@ native: $(PROJECT)
 clean:
 	rm -f $(OBJ) $(DEPFILES) html/game.* $(PROJECT)
 
-%.o: %.cpp
+%.o: %.cpp %.d
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 $(WEB_TARGET): $(OBJ)
@@ -34,8 +34,8 @@ $(WEB_TARGET): $(OBJ)
 $(PROJECT): $(OBJ)
 	$(CXX) $(OBJ) $(NATIVE_LDFLAGS) -o $@
 
-.PHONY: $(DEPFILES)
+#.PHONY: $(DEPFILES)
 $(DEPFILES):
-	$(CXX) -MM $(CXXFLAGS) $(@:%.d=%.cpp) -MT $(@:%.d=%.o) > $@
+	$(CXX) -MM $(CXXFLAGS) $(@:%.d=%.cpp) -MT "$(@:%.d=%.o) $@" -MF $@
 
 include $(DEPFILES)
