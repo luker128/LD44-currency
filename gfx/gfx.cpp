@@ -68,7 +68,7 @@ void destroy_texture(unsigned int texture) {
 
 
 Image::Image(const std::string &filename) {
-  texture = load_texture(filename.c_str(), GL_NEAREST, &w, &h, nullptr, nullptr );
+  texture = load_texture(filename.c_str(), GL_LINEAR, &w, &h, nullptr, nullptr );
 }
 
 GLuint createShader(GLuint type, const std::string &source) {

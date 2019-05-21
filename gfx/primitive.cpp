@@ -48,12 +48,14 @@ PrimitiveShader::PrimitiveShader() : red(1.0), green(1.0), blue(1.0), alpha(1.0)
     "in vec2 a_position; \n"
     "uniform vec2 u_scroll; \n"
     "uniform vec2 u_screensize; \n"
+    "uniform vec2 u_texturePos; \n"
+    "uniform float u_textureScale; \n"
     "out vec2 v_texcoord; \n"
     "void main() { \n"
     "  vec2 pos = a_position + u_scroll;\n"
     "  vec2 scaled_pos = ((pos/u_screensize) * 2.0 - 1.0) * vec2(1.0, -1.0); \n"
     "  gl_Position = vec4(scaled_pos, 1.0, 1.0); \n"
-    "  v_texcoord = a_position / 128.0; \n"
+    "  v_texcoord = ((a_position+u_texturePos) / 128.0) * u_textureScale; \n"
     "} \n";
   std::string fragmentShader = "#version 300 es \n"
     "precision mediump float; \n"
@@ -88,6 +90,8 @@ PrimitiveShader::PrimitiveShader() : red(1.0), green(1.0), blue(1.0), alpha(1.0)
   u_screensize = glGetUniformLocation(program, "u_screensize");
   u_color = glGetUniformLocation(program, "u_color");
   u_useTexture = glGetUniformLocation(program, "u_useTexture");
+  u_textureScale = glGetUniformLocation(program, "u_textureScale");
+  u_texturePos = glGetUniformLocation(program, "u_texturePos");
 }
 
 
@@ -103,6 +107,11 @@ void PrimitiveShader::setScroll(int x, int y) {
   scrollY = y;
 }
 
+void PrimitiveShader::setScale(float s) {
+  scale = s;
+}
+
+
 void PrimitiveShader::drawLine(float x0, float y0, float x1, float y1) {
   GLfloat positions[4] = {x0,y0, x1,y1};
   glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
@@ -117,11 +126,19 @@ void PrimitiveShader::drawRectangle(float x0, float y0, float x1, float y1) {
   executeDraw(GL_TRIANGLES, 6);
 }
 
-void PrimitiveShader::drawConvexPolygon(const std::vector<float>& points) {
+void PrimitiveShader::drawConvexPolygon(const std::vector<float>& points, float texture_scale, float texture_pos_x, float texture_pos_y) {
   const GLfloat* positions = points.data();
   glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
   glBufferData(GL_ARRAY_BUFFER, points.size() * sizeof(float), positions, GL_DYNAMIC_DRAW);
-  executeDraw(GL_TRIANGLE_FAN, points.size()/2, true);
+  glUseProgram(program);
+  glBindVertexArray(vao);
+  glUniform2f(u_screensize, screen_w*scale, screen_h*scale);
+  glUniform4f(u_color, red, green, blue, alpha);
+  glUniform2f(u_scroll, scrollX, scrollY);
+  glUniform1f(u_textureScale, texture_scale);
+  glUniform2f(u_texturePos, texture_pos_x, texture_pos_y);
+  glUniform1i(u_useTexture, 1);
+  glDrawArrays(GL_TRIANGLE_FAN, 0, points.size()/2);
 }
 
 void PrimitiveShader::drawCircleOutline(float x0, float y0, float r) {
@@ -160,7 +177,7 @@ void PrimitiveShader::executeDraw(int primitive, int numVertex, bool useTexture)
   glUseProgram(program);
   glBindVertexArray(vao);
   glUniform2f(u_scroll, scrollX, scrollY);
-  glUniform2f(u_screensize, screen_w, screen_h);
+  glUniform2f(u_screensize, screen_w*scale, screen_h*scale);
   glUniform4f(u_color, red, green, blue, alpha);
   glUniform1i(u_useTexture, useTexture);
   glDrawArrays(primitive, 0, numVertex);

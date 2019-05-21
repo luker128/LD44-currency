@@ -91,6 +91,9 @@ struct Line {
 struct Polygon {
   std::vector<Point*> points;
   int textureId;
+  float textureScale = 1.0;
+  float textureX = 0.0;
+  float textureY = 0.0;
   std::vector<Line> getLines() {
     std::vector<Line> lines;
     for (size_t i=0; i+1<points.size(); i++) {
@@ -131,6 +134,8 @@ class Editor {
       textures.emplace_back("data/steel.png");
       //  https://www.deviantart.com/strapaca/art/Fresh-dark-green-gras-seamless-texture-782082733
       textures.emplace_back("data/grass.png");
+      textures.emplace_back("data/roof.png");
+      textures.emplace_back("data/gray_wall.png");
 
       drawFilledPolygons = false;
       drawGrid = true;
@@ -178,6 +183,15 @@ class Editor {
       }
     }
 
+    void mouseWheel(int value) {
+      if (value > 0) {
+        mouseWheelUp();
+      }
+      else {
+        mouseWheelDown();
+      }
+    }
+
     void joyButton(bool pressed, int button) {
       if (pressed == true) {
         jumpButtonPressed();
@@ -188,8 +202,8 @@ class Editor {
 
 
     bool gameLoop() {
-      mX = (mouse_x - scrollX);
-      mY = (mouse_y - scrollY);
+      mX = (mouse_x - scrollX)  * zoom;
+      mY = (mouse_y - scrollY) * zoom;
       static int delay = 0;
 //      if ((++delay)%10==0)
       {
@@ -205,6 +219,14 @@ class Editor {
 // Input
 ///////////////////
 
+
+    void mouseWheelUp() {
+      zoom *= 1.25;
+    }
+
+    void mouseWheelDown() {
+      zoom *= 0.75;
+    }
 
     void mouseDownLeft() {
       if (newPolygon == nullptr) {
@@ -304,6 +326,30 @@ class Editor {
       if (key == '\r') {
         spawnCoin(mX, mY);
       }
+      if (key == '[') {
+        Polygon* poly = getPolygonAt(mX, mY);
+        poly->textureScale *= 0.5;
+      }
+      if (key == ']') {
+        Polygon* poly = getPolygonAt(mX, mY);
+        poly->textureScale *= 2.0;
+      }
+      if (key == 'j') {
+        Polygon* poly = getPolygonAt(mX, mY);
+        poly->textureY += 1;
+      }
+      if (key == 'k') {
+        Polygon* poly = getPolygonAt(mX, mY);
+        poly->textureY -= 1;
+      }
+      if (key == 'h') {
+        Polygon* poly = getPolygonAt(mX, mY);
+        poly->textureX -= 1;
+      }
+      if (key == 'l') {
+        Polygon* poly = getPolygonAt(mX, mY);
+        poly->textureX += 1;
+      }
       if (key == 75 || key == 33) { // pg up
         Polygon* poly = getPolygonAt(mX, mY);
         poly->textureId++;
@@ -318,9 +364,9 @@ class Editor {
           poly->textureId = textures.size()-1;
         }
       }
-      if (key == 'l') {
-        loadLevel();
-      }
+//      if (key == 'l') {
+//        loadLevel();
+//      }
       if (key == 's') {
         saveLevel();
       }
@@ -381,6 +427,9 @@ class Editor {
       file << polygons.size() << std::endl;
       for (Polygon* polygon: polygons) {
         file << polygon->textureId << " ";
+        file << polygon->textureScale << " ";
+        file << polygon->textureX << " ";
+        file << polygon->textureY << " ";
         file << polygon->points.size();
         for (Point* point: polygon->points) {
           file << " " << pointIds[point];
@@ -406,8 +455,14 @@ class Editor {
         Polygon* polygon = new Polygon;
         int textureId;
         int numPoints;
-        file >> textureId >> numPoints;
+        float textureScale;
+        float textureX;
+        float textureY;
+        file >> textureId >> textureScale >> textureX >> textureY >> numPoints;
         polygon->textureId = textureId;
+        polygon->textureScale = textureScale;
+        polygon->textureX = textureX;
+        polygon->textureY = textureY;
         for (int j=0; j<numPoints; j++) {
           int pointId;
           file >> pointId;
@@ -672,19 +727,24 @@ class Editor {
 
     void drawPoint(const Point& point) {
       static const int SIZE = POINT_SIZE;
-      prim.drawRectangle(point.x-SIZE, point.y-SIZE,
-                         point.x+SIZE, point.y+SIZE);
+      prim.drawRectangle(point.x * zoom - SIZE, point.y * zoom - SIZE,
+                         point.x * zoom + SIZE, point.y * zoom + SIZE);
+    }
+
+    void drawLine(const Point& a, const Point& b) {
+      prim.drawLine(a.x * zoom, a.y * zoom,
+                    b.x * zoom, b.y * zoom);
     }
 
     void drawPolygon(const Polygon& polygon) {
       if (drawFilledPolygons) {
         std::vector<float> positions;
         for (Point* point: polygon.points) {
-          positions.push_back(point->x);
-          positions.push_back(point->y);
+          positions.push_back(point->x * zoom);
+          positions.push_back(point->y * zoom);
         }
         glBindTexture(GL_TEXTURE_2D, textures[polygon.textureId].getTexture());
-        prim.drawConvexPolygon(positions);
+        prim.drawConvexPolygon(positions, polygon.textureScale / zoom, polygon.textureX * zoom, polygon.textureY * zoom);
       }
       else {
         for (const auto& point: polygon.points) {
@@ -696,19 +756,13 @@ class Editor {
           drawPoint(*point);
         }
         for (size_t i=0; (i+1)<polygon.points.size(); i++) {
-            prim.setColor(1,1,1,1);
-          prim.drawLine(polygon.points[i]->x, polygon.points[i]->y,
-                        polygon.points[i+1]->x, polygon.points[i+1]->y);
+          prim.setColor(1,1,1,1);
+          drawLine(*polygon.points[i], *polygon.points[i+1]);
           {
-            Point v = *polygon.points[i] - *polygon.points[i+1];
-            Point vn = v / len(v);
-            Point n(vn.y, -vn.x);
-            prim.drawLine(
-                          (polygon.points[i]->x + polygon.points[i+1]->x) / 2.0,
-                          (polygon.points[i]->y + polygon.points[i+1]->y) / 2.0,
-                          (polygon.points[i]->x + polygon.points[i+1]->x) / 2.0 + n.x*10,
-                          (polygon.points[i]->y + polygon.points[i+1]->y) / 2.0 + n.y*10
-                          );
+            Point v = *polygon.points[i+1] - *polygon.points[i];
+            Point n = perpendicular(v) / len(v);
+            Point mid = *polygon.points[i] + (v * 0.5);
+            drawLine(mid, mid + n*10);
           }
         }
       }
@@ -719,10 +773,10 @@ class Editor {
       if (drawGrid) {
         prim.setColor((101/255.0)*0.9, (184/255.0)*0.9, (227/225.0)*0.9, 1.0);
         prim.setColor(0,0,0, 0.06);
-        for (int y=0; y<100; y++) {
+        for (int y=0; y<screen_h/gridSize; y++) {
           prim.drawLine(0,gridSize*y, screen_w, gridSize*y);
         }
-        for (int x=0; x<100; x++) {
+        for (int x=0; x<screen_w/gridSize; x++) {
           prim.drawLine(gridSize*x, 0, gridSize*x, screen_h);
         }
       }
@@ -732,6 +786,7 @@ class Editor {
       }
       else {
         prim.setScroll(scrollX, scrollY);
+    //    prim.setScale(zoom);
       }
       prim.setColor(1,1,1,1);
       for (Polygon* poly: polygons) {
@@ -790,6 +845,7 @@ class Editor {
     std::vector<Image> textures;
     double scrollX = 0;
     double scrollY = 0;
+    float zoom = 1.0;
     bool scrolling = false;
     int scrollStartX;
     int scrollStartY;
@@ -816,6 +872,10 @@ void mouse_button(bool pressed, int button, int x, int y ) {
   editor->mouseButton(pressed, button);
 }
 
+void mouse_wheel(int value) {
+  editor->mouseWheel(value);
+}
+
 void joy_button(bool pressed, int button) {
   editor->joyButton(pressed, button);
 }
@@ -825,11 +885,15 @@ bool gameLoop() {
 }
 
 void gameInit() {
-  createWindow(960, 540, "Currency - Editor");
+  const int w = 1600;
+  const int h  = (w/16.0)*9.0;
+  createWindow(w, h, "Currency - Editor");
   glViewport(0, 0, screen_w, screen_h);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glClearColor(101/255.0, 184/255.0, 227/225.0, 1.0);
+  glClearColor(101/255.0 * 0.5,
+               184/255.0 * 0.5,
+               227/225.0 * 0.5, 1.0);
   editor = new Editor();
 }
 

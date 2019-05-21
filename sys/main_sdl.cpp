@@ -36,6 +36,10 @@ bool processInput() {
         mouse_y = event.motion.y;
         break;
       }
+      case SDL_MOUSEWHEEL: {
+        std::cout << "Mouse wheel " << event.wheel.y << std::endl;
+        mouse_wheel(event.wheel.y);
+      }
       case SDL_MOUSEBUTTONDOWN: {
         if (event.button.button == 1) {
           mouse_left = true;
