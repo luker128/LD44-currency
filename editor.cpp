@@ -126,6 +126,7 @@ class Editor {
   public:
 
     Editor() :
+      fontSheet("data/font.png", 16, 16),
       coinImage("data/coin5.png", 64, 64)
     {
       // https://www.deviantart.com/strapaca/art/Brick-wall-seamless-texture-782082949
@@ -724,6 +725,21 @@ class Editor {
 // Drawing
 ///////////////////
 
+    void print(int start_x, int start_y, const std::string& text, float size=1.0) {
+      int x = start_x - 8;
+      int y = start_y - 8;
+      const float kern = 0.8;
+      for (char c: text) {
+        if (c == '\n') {
+          x = start_x - 8;
+          y += 20;
+        }
+        else {
+          fontSheet.drawSpriteScaled(x, y, c, size);
+          x += fontSheet.getFrameWidth() * kern * size;
+        }
+      }
+    }
 
     void drawPoint(const Point& point) {
       static const int SIZE = POINT_SIZE;
@@ -766,6 +782,22 @@ class Editor {
           }
         }
       }
+    }
+    void printStatus() {
+      Polygon* polygon = getPolygonAt(mX, mY);
+      Point* point = getPointAt(mX, mY);
+      std::ostringstream os;
+      os << "Polygon: " << polygon << "\n";
+      if (polygon) {
+        os << "  textureId: " << polygon->textureId << "\n";
+        os << "  textureScale: " << polygon->textureScale << "\n";
+        os << "  textureX/Y: " << Point(polygon->textureX, polygon->textureY) << "\n";
+      }
+      os << "Point:" << point << "\n";
+      if (point) {
+        os << "  " << *point << "\n";
+      }
+      print(32,32, os.str());
     }
 
     void draw() {
@@ -815,6 +847,7 @@ class Editor {
         prim.drawLine(mX, mY, selectingRectangleStart.x, mY);
         prim.drawLine(mX, mY, mX, selectingRectangleStart.y);
       }
+      printStatus();
     }
 
     void spawnCoin(int x, int y) {
@@ -822,6 +855,8 @@ class Editor {
       delete coin;
       coin = new Coin(x,y);
     }
+
+    SpriteSheet fontSheet;
 
     Coin* coin = nullptr;
     bool drawFilledPolygons = false;
