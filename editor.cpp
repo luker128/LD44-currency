@@ -277,8 +277,7 @@ class Editor {
     }
 
     void mouseDownLeft() {
-      if (newPolygon == nullptr) {
-        // not creating new polygon
+      if (newTriangle == nullptr) {
         Point* p = getPointAt(mX, mY);
         if (shiftKey) {
           if (p != nullptr) {
@@ -368,8 +367,8 @@ class Editor {
 
     void mouseDownRight() {}
     void mouseUpRight() {
-      if (newPolygon != nullptr) {
-        newPolygon->points.pop_back();
+      if (newTriangle != nullptr) {
+        newTriangle->points.pop_back();
       }
     }
 
@@ -380,8 +379,6 @@ class Editor {
     }
     void mouseUpMiddle() {
       scrolling = false;
-//      std::cout << getPolygonAt(mX, mY) << std::endl;
-//      std::cout << findNearestLine(mX, mY) << std::endl;
     }
 
     void keyPress(int key) {
@@ -442,18 +439,14 @@ class Editor {
     }
 
     double getJoyValue() {
-      // std::cout << "input:   " << joy_x;
       int reduced = joy_x / 1024;
-      // std::cout << "reduced: " << reduced << std::endl;
       double scaled = reduced / 30.0;
-      // std::cout << "scaled:  " << scaled << std::endl;
       if (scaled > 1.0) {
         scaled = 1.0;
       }
       if (scaled < -1.0) {
         scaled = -1.0;
       }
-      // std::cout << "clamped: " << scaled << std::endl;
       return scaled;
     }
 
@@ -609,9 +602,6 @@ class Editor {
     }
 
     bool sideOfLine(double x, double y, Point* a, Point* b) {
-      // std::cout << "checking side " << x << ", " << y << " of line "
-      //   << a->x << ", " << a->y << " - " << b->x << ", " << b->y;
-
       double dy = (b->y - a->y);
       double dx = (b->x - a->x);
       if (dx == 0) {
@@ -624,17 +614,12 @@ class Editor {
       }
       double direction = dy/dx;
       double position = a->y - direction*a->x;
-
       bool relation = y > direction*x + position;
-      // std::cout << std::endl << "direction = " << dx << std::endl;
-      // std::cout << "relation = " << relation << std::endl;
       bool result = (relation == (dx < 0));
       if (result == true) {
-        // std::cout << " FALSE" << std::endl;
         return false;
       }
       else {
-        // std::cout << " TRUE" << std::endl;
         return true;
       }
     }
@@ -940,18 +925,18 @@ class Editor {
 
     void printStatus() {
       Triangle* triangle = getTriangleAt(Point(mX, mY));
-      Face* polygon = nullptr;
+      Face* face = nullptr;
       if (triangle != nullptr) {
-        polygon = getFaceContaining(*triangle);
+        face = getFaceContaining(*triangle);
       }
       Point* point = getPointAt(mX, mY);
       std::ostringstream os;
       os << "Mode: " << getModeName() << "\n";
-      os << "Face: " << polygon << "\n";
-      if (polygon) {
-        os << "  textureId: " << polygon->textureId << "\n";
-        os << "  textureScale: " << polygon->textureScale << "\n";
-        os << "  textureX/Y: " << Point(polygon->textureX, polygon->textureY) << "\n";
+      os << "Face: " << face << "\n";
+      if (face) {
+        os << "  textureId: " << face->textureId << "\n";
+        os << "  textureScale: " << face->textureScale << "\n";
+        os << "  textureX/Y: " << Point(face->textureX, face->textureY) << "\n";
       }
       os << "Point:" << point << "\n";
       if (point) {
@@ -1025,10 +1010,7 @@ class Editor {
     bool drawTextures = false;
     PrimitiveShader prim;
     SpriteSheet coinImage;
-//    Image terrainImage;
-    Polygon* newPolygon = nullptr;
     std::vector<Polygon*> polygons;
-//    Point* currentPoint = nullptr;
 
     std::set<Point*> selectedPoints;
     bool draggingPoints = false;
