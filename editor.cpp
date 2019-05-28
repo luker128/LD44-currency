@@ -83,9 +83,47 @@ double sign(double a) {
 struct Line {
   Point a;
   Point b;
-  Line(): a(0,0), b(0,0) {} 
+  Line(): a(0,0), b(0,0) {}
   Line(const Point& a, const Point& b) : a(a), b(b) {}
   Point getVector() { return b-a; }
+};
+
+struct Edge {
+  Point* a;
+  Point* b;
+  bool shared;
+  Edge(Point& a, Point& b) : a(&a), b(&b), shared(false) {
+    std::cout << "Creating edge " << this << " of points " << &a << " and " << &b << std::endl;
+    std::cout << "  positions: " << a << ", " << b << std::endl;
+  }
+  Point getVector() { return (*b)-(*a); }
+  bool isExternal() { return !shared; }
+};
+
+struct Triangle {
+  std::vector<Edge*> edges;
+  Triangle() {}
+};
+
+struct Face {
+  std::vector<Triangle*> triangles;
+  int textureId;
+  float textureScale = 1.0;
+  float textureX = 0.0;
+  float textureY = 0.0;
+
+  std::vector<Line> getLines() {
+    std::vector<Line> lines;
+    for (auto triangle: triangles) {
+      for (auto edge: triangle->edges) {
+        if (edge->isExternal()) {
+          lines.push_back(Line(*(edge->a), *(edge->b)));
+        }
+      }
+    }
+    return lines;
+  }
+
 };
 
 struct Polygon {
@@ -121,6 +159,15 @@ const double GRAVITY_MAX = 0.1;
 
 class Editor {
 
+    struct NewTriangle {
+      std::vector<Point*> points;
+      NewTriangle(Point* p = nullptr) {
+        if (p != nullptr) {
+          points.push_back(p);
+        }
+      }
+    };
+
     Editor(const Editor&) = delete;
 
   public:
@@ -138,7 +185,7 @@ class Editor {
       textures.emplace_back("data/roof.png");
       textures.emplace_back("data/gray_wall.png");
 
-      drawFilledPolygons = false;
+      drawTextures = false;
       drawGrid = true;
       shouldSnapToGrid = true;
       loadLevel();
@@ -259,9 +306,43 @@ class Editor {
         }
       }
     }
+
+    double signedArea(Point& a, Point& b, Point& c) {
+      return 0.5 * (-1*a.y*b.x + a.x*b.y +a.y*c.x -b.y*c.x -a.x*c.y +b.x*c.y);
+    }
+
+    void addTriangleToLevel(const NewTriangle& trianglePoints) {
+      Face* newFace = new Face();
+      Triangle* triangle = new Triangle();
+
+      {
+        Point& a = *trianglePoints.points[0];
+        Point& b = *trianglePoints.points[1];
+        Point& c = *trianglePoints.points[2];
+        double sa = signedArea(a, b, c);
+        if (sa < 0) {
+          auto tmp = b;
+          b = c;
+          c = tmp;
+        }
+        triangle->edges.push_back(new Edge(a, b));
+        triangle->edges.push_back(new Edge(b, c));
+        triangle->edges.push_back(new Edge(c, a));
+      }
+
+      newFace->triangles.push_back(triangle);
+      faces.push_back(newFace);
+    }
+
     void mouseUpLeft() {
-      if (newPolygon != nullptr) {
-        addPointToPolygon(mX, mY, *newPolygon);
+      if (newTriangle != nullptr) {
+        Point* point = getOrCreatePoint(mX, mY);
+        newTriangle->points.push_back(point);
+        if (newTriangle->points.size() == 3) {
+          addTriangleToLevel(*newTriangle);
+          delete newTriangle;
+          newTriangle = nullptr;
+        }
       }
       else {
         if (selectingRectangle) {
@@ -305,64 +386,51 @@ class Editor {
 
     void keyPress(int key) {
       std::cout << key << std::endl;
+      Face* face = getFaceAt(Point(mX, mY));
       if (key == 127 || key == 46) { // delete
         delete coin;
         coin = nullptr;
       }
       if (key == 32) { // SPACE
-        if (newPolygon == nullptr)  {
-          newPolygon = new Polygon();
-          addPointToPolygon(mX, mY, *newPolygon);
-        }
-        else {
-          Point* firstPoint = newPolygon->points.front();
-          newPolygon->points.push_back(firstPoint);
-          polygons.push_back(newPolygon);
-          newPolygon = nullptr;
+        if (newTriangle == nullptr) {
+          Point* point = getPointAt(mX, mY);
+          newTriangle = new NewTriangle(point);
         }
       }
       if (key == 'f') {
-        drawFilledPolygons = !drawFilledPolygons;
+        drawTextures = !drawTextures;
       }
       if (key == '\r') {
         spawnCoin(mX, mY);
       }
       if (key == '[') {
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureScale *= 0.5;
+        face->textureScale *= 0.5;
       }
       if (key == ']') {
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureScale *= 2.0;
+        face->textureScale *= 2.0;
       }
       if (key == 'j') {
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureY += 1;
+        face->textureY += 1;
       }
       if (key == 'k') {
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureY -= 1;
+        face->textureY -= 1;
       }
       if (key == 'h') {
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureX -= 1;
+        face->textureX -= 1;
       }
       if (key == 'l') {
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureX += 1;
+        face->textureX += 1;
       }
       if (key == 75 || key == 33) { // pg up
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureId++;
-        if (poly->textureId == textures.size()) {
-          poly->textureId = 0;
+        face->textureId++;
+        if (face->textureId == textures.size()) {
+          face->textureId = 0;
         }
       }
       if (key == 78 || key == 34) { // pg dn
-        Polygon* poly = getPolygonAt(mX, mY);
-        poly->textureId--;
-        if (poly->textureId == -1) {
-          poly->textureId = textures.size()-1;
+        face->textureId--;
+        if (face->textureId == -1) {
+          face->textureId = textures.size()-1;
         }
       }
 //      if (key == 'l') {
@@ -411,12 +479,15 @@ class Editor {
       std::map<Point*, int> pointIds;
       std::vector<Point*> pointsById;
       int count = 0;
-      for (Polygon* polygon: polygons) {
-        for (Point* point: polygon->points) {
-          if (pointIds.find(point) == pointIds.end()) {
-            pointIds[point] = count;
-            count++;
-            pointsById.push_back(point);
+      for (Face* face: faces) {
+        for (Triangle* triangle: face->triangles) {
+          for (Edge* edge: triangle->edges) {
+            Point* point = edge->a;
+            if (pointIds.find(point) == pointIds.end()) {
+              pointIds[point] = count;
+              count++;
+              pointsById.push_back(point);
+            }
           }
         }
       }
@@ -450,26 +521,39 @@ class Editor {
         file >> x >> y;
         points.push_back(new Point(x, y));
       }
-      int numPolygons;
-      file >> numPolygons;
-      for (int i=0; i<numPolygons; i++) {
-        Polygon* polygon = new Polygon;
+      int numFaces;
+      file >> numFaces;
+      std::map<std::pair<Point*, Point*>, Edge*> edgeMap;
+      for (int i=0; i<numFaces; i++) {
         int textureId;
         int numPoints;
         float textureScale;
         float textureX;
         float textureY;
         file >> textureId >> textureScale >> textureX >> textureY >> numPoints;
-        polygon->textureId = textureId;
-        polygon->textureScale = textureScale;
-        polygon->textureX = textureX;
-        polygon->textureY = textureY;
-        for (int j=0; j<numPoints; j++) {
-          int pointId;
-          file >> pointId;
-          polygon->points.push_back(points[pointId]);
+        Face* face = new Face;
+        face->textureId = textureId;
+        face->textureScale = textureScale;
+        face->textureX = textureX;
+        face->textureY = textureY;
+        face->triangles.push_back(new Triangle);
+        for (int j=0; j<numPoints-1; j++) {
+          Point* a = pointsInPoly[j];
+          Point* b = pointsInPoly[j+1];
+          auto key = std::make_pair(a, b);
+          Edge* edge;
+          auto it = edgeMap.find(key);
+          if (it == edgeMap.end()) {
+            edge = new Edge(*a, *b);
+            edgeMap.insert(std::make_pair(key, edge));
+          }
+          else {
+            edge = it->second;
+            edge->shared = true;
+          }
+          face->triangles[0]->edges.push_back(edge);
         }
-        polygons.push_back(polygon);
+        faces.push_back(face);
       }
     }
 
@@ -477,16 +561,12 @@ class Editor {
 // Level editting
 ///////////////////
 
-
-    void addPointToPolygon(int x, int y, Polygon& polygon) {
+    Point* getOrCreatePoint(int x, int y) {
       Point* oldPoint = getPointAt(x, y);
-      if (oldPoint == nullptr) {
-        Point* newPoint = new Point(x, y);
-        polygon.points.push_back(newPoint);
+      if (oldPoint != nullptr) {
+        return oldPoint;
       }
-      else {
-        polygon.points.push_back(oldPoint);
-      }
+      return new Point(x, y);
     }
 
 
@@ -495,12 +575,15 @@ class Editor {
 
 
     Point* getPointAt(int x, int y) {
-      for (const auto& poly: polygons) {
-        for (auto &point: poly->points) {
-          int dx = abs(x - point->x);
-          int dy = abs(y - point->y);
-          if (std::max(dx, dy) <= POINT_SIZE) {
-            return point;
+      for (auto& face: faces) {
+        for (auto& triangle: face->triangles) {
+          for (auto& edge: triangle->edges) {
+            Point* point = edge->a;
+            int dx = abs(x - point->x);
+            int dy = abs(y - point->y);
+            if (std::max(dx, dy) <= POINT_SIZE) {
+              return point;
+            }
           }
         }
       }
@@ -538,10 +621,24 @@ class Editor {
       }
     }
 
-    bool isInPolygon(double x, double y, const Polygon& poly) {
-      // std::cout << "checking if " << x << ", " << y << " is in polygon" << std::endl;
-      for (size_t i=0; i+1<poly.points.size(); i++) {
-        bool side = sideOfLine(x, y, poly.points[i], poly.points[i+1]);
+    Face* getFaceContaining(const Triangle& t) {
+      for (auto face: faces) {
+        for (auto triangle: face->triangles) {
+          if (triangle == &t) {
+            return face;
+          }
+        }
+      }
+      return nullptr;
+    }
+
+    bool sideOfEdge(const Point& point, const Edge& edge) {
+      return sideOfLine(point.x, point.y, edge.a, edge.b);
+    }
+
+    bool isInTriangle(const Point& point, const Triangle& triangle) {
+      for (auto edge: triangle.edges) {
+        bool side = sideOfEdge(point, *edge);
         if (side == false) {
           return false;
         }
@@ -549,15 +646,25 @@ class Editor {
       return true;
     }
 
-    Polygon* getPolygonAt(const Point& p) { return getPolygonAt(p.x, p.y); }
-    Polygon* getPolygonAt(double x, double y) {
-      for (Polygon* polygon: polygons) {
-        if (isInPolygon(x, y, *polygon)) {
-          return polygon;
+    Triangle* getTriangleAt(const Point& p) {
+      for (auto face: faces) {
+        for (auto triangle: face->triangles) {
+          if (isInTriangle(p, *triangle)) {
+            return triangle;
+          }
         }
       }
       return nullptr;
     }
+
+    Face* getFaceAt(const Point& point) { // TODO: inefficient, rewrite
+      Triangle* triangle = getTriangleAt(point);
+      if (triangle == nullptr) {
+        return nullptr;
+      }
+      return getFaceContaining(*triangle);
+    }
+
 
 // Physics
 ///////////////////
@@ -752,42 +859,77 @@ class Editor {
                     b.x * zoom, b.y * zoom);
     }
 
-    void drawPolygon(const Polygon& polygon) {
-      if (drawFilledPolygons) {
-        std::vector<float> positions;
-        for (Point* point: polygon.points) {
+    void drawFaceTextured(const Face& face) {
+      std::vector<float> positions;
+      for (auto triangle: face.triangles) {
+        for (auto edge: triangle->edges) {
+          Point* point = edge->a;
           positions.push_back(point->x * zoom);
           positions.push_back(point->y * zoom);
         }
-        glBindTexture(GL_TEXTURE_2D, textures[polygon.textureId].getTexture());
-        prim.drawConvexPolygon(positions, polygon.textureScale / zoom, polygon.textureX * zoom, polygon.textureY * zoom);
       }
-      else {
-        for (const auto& point: polygon.points) {
-          if (selectedPoints.count(point)) {
-            prim.setColor(0,0,1,1);
-          } else {
-            prim.setColor(1,1,1,1);
-          }
-          drawPoint(*point);
+      glBindTexture(GL_TEXTURE_2D, textures[face.textureId].getTexture());
+      prim.drawConvexPolygon(positions, face.textureScale / zoom, face.textureX * zoom, face.textureY * zoom);
+    }
+
+    void drawFaceWireframe(const Face& face) {
+      std::set<Point*> pointsToDraw;
+      for (auto triangle: face.triangles) {
+        for (auto edge: triangle->edges) {
+          drawLine(*edge->a, *edge->b);
+          pointsToDraw.insert(edge->a);
+          pointsToDraw.insert(edge->b);
+          Point v = edge->getVector();
+          Point n = perpendicular(v) / len(v);
+          Point mid = *edge->a + (v * 0.5);
+          drawLine(mid, mid + n*10);
         }
-        for (size_t i=0; (i+1)<polygon.points.size(); i++) {
+      }
+      for (auto point: pointsToDraw) {
+        if (selectedPoints.count(point)) {
+          prim.setColor(0,0,1,1);
+        } else {
           prim.setColor(1,1,1,1);
-          drawLine(*polygon.points[i], *polygon.points[i+1]);
-          {
-            Point v = *polygon.points[i+1] - *polygon.points[i];
-            Point n = perpendicular(v) / len(v);
-            Point mid = *polygon.points[i] + (v * 0.5);
-            drawLine(mid, mid + n*10);
-          }
         }
+        drawPoint(*point);
       }
     }
+
+    void drawFace(const Face& face) {
+      if (drawTextures) {
+        drawFaceTextured(face);
+      }
+      drawFaceWireframe(face);
+    }
+
+    void drawNewTriangle(NewTriangle* triangle) {
+      if (triangle != nullptr && triangle->points.size() > 0) {
+        for (int i=0; i<triangle->points.size()-1; i++) {
+          drawLine(*triangle->points[i], *triangle->points[i+1]);
+        }
+        drawLine(*triangle->points[triangle->points.size()-1], Point(mX, mY));
+      }
+    }
+
+    std::string getModeName() {
+      if (newTriangle != nullptr) {
+        return "Creating triangle";
+      }
+      else {
+        return "Idle";
+      }
+    }
+
     void printStatus() {
-      Polygon* polygon = getPolygonAt(mX, mY);
+      Triangle* triangle = getTriangleAt(Point(mX, mY));
+      Face* polygon = nullptr;
+      if (triangle != nullptr) {
+        polygon = getFaceContaining(*triangle);
+      }
       Point* point = getPointAt(mX, mY);
       std::ostringstream os;
-      os << "Polygon: " << polygon << "\n";
+      os << "Mode: " << getModeName() << "\n";
+      os << "Face: " << polygon << "\n";
       if (polygon) {
         os << "  textureId: " << polygon->textureId << "\n";
         os << "  textureScale: " << polygon->textureScale << "\n";
@@ -821,12 +963,12 @@ class Editor {
     //    prim.setScale(zoom);
       }
       prim.setColor(1,1,1,1);
-      for (Polygon* poly: polygons) {
-        drawPolygon(*poly);
+      for (Face* face: faces) {
+        drawFace(*face);
       }
       prim.setColor(1,1,0,1);
-      if (newPolygon != nullptr) {
-        drawPolygon(*newPolygon);
+      if (newTriangle != nullptr) {
+        drawNewTriangle(newTriangle);
       }
       if (coin != nullptr) {
         if (coin->velocity.x != 0) {
@@ -834,7 +976,7 @@ class Editor {
         }
         //coinImage.drawSpriteRotated(coin->position.x+scrollX, coin->position.y+scrollY, 0, coin->rotation);
         coinImage.drawSpriteRotated(screen_w / 2, screen_h /2, 0, coin->rotation);
-        if (!drawFilledPolygons) {
+        if (!drawTextures) {
           prim.drawLine(coin->position.x, coin->position.y,
                         coin->position.x + coin->velocity.x * 30,
                         coin->position.y + coin->velocity.y * 30
@@ -858,8 +1000,11 @@ class Editor {
 
     SpriteSheet fontSheet;
 
+    std::vector<Face*> faces;
+    NewTriangle* newTriangle = nullptr;
+
     Coin* coin = nullptr;
-    bool drawFilledPolygons = false;
+    bool drawTextures = false;
     PrimitiveShader prim;
     SpriteSheet coinImage;
 //    Image terrainImage;
