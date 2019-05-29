@@ -13,149 +13,9 @@
 #include "sys/main.h"
 #include "gfx/primitive.h"
 #include "gfx/gfx.h"
-
-
-struct Point {
-  double x;
-  double y;
-  Point(double x, double y) : x(x), y(y) {}
-};
-
-double dot(const Point& a, const Point& b) {
-  return a.x * b.x + a.y * b.y;
-}
-
-double operator*(const Point& a, const Point& b) {
-  return dot(a, b);
-}
-
-Point operator*(const Point& v, double s) {
-  return Point(v.x * s, v.y * s);
-}
-
-Point operator/(const Point& v, double s) {
-  return Point(v.x / s, v.y / s);
-}
-
-double len(const Point& v) {
-  return sqrt(v.x*v.x + v.y*v.y);
-}
-
-double len2(const Point& v) {
-  return v.x*v.x + v.y*v.y;
-}
-
-Point operator+(const Point& a, const Point& b) {
-  return Point(a.x + b.x, a.y + b.y);
-}
-
-Point operator-(const Point& a, const Point& b) {
-  return Point(a.x - b.x, a.y - b.y);
-}
-
-std::ostream& operator<<(std::ostream& os, const Point& v) {
-  os << "(" << v.x << ", " << v.y << ")";
-  return os;
-}
-
-bool operator!=(const Point& a, const Point& b) {
-  return a.x != b.x || a.y != b.y; // TODO: use epsilon
-}
-
-Point normalize(const Point& v) {
-  return v / len(v);
-}
-
-Point perpendicular(const Point& v) {
-  return Point(-v.y, v.x);
-}
-
-double sign(double a) {
-  if (a > 0.0) {
-    return +1.0;
-  }
-  if (a < 0.0) {
-    return -1.0;
-  }
-  return 0.0;
-}
-
-struct Line {
-  Point a;
-  Point b;
-  Line(): a(0,0), b(0,0) {}
-  Line(const Point& a, const Point& b) : a(a), b(b) {}
-  Point getVector() { return b-a; }
-};
-
-struct Edge {
-  Point* a;
-  Point* b;
-  bool shared;
-  Edge(Point& a, Point& b) : a(&a), b(&b), shared(false) {
-    std::cout << "Creating edge " << this << " of points " << &a << " and " << &b << std::endl;
-    std::cout << "  positions: " << a << ", " << b << std::endl;
-  }
-  Point getVector() { return (*b)-(*a); }
-  bool isExternal() { return !shared; }
-};
-
-struct Triangle {
-  std::vector<Edge*> edges;
-  Triangle() {}
-};
-
-struct Face {
-  std::vector<Triangle*> triangles;
-  int textureId;
-  float textureScale = 1.0;
-  float textureX = 0.0;
-  float textureY = 0.0;
-
-  std::vector<Line> getLines() {
-    std::vector<Line> lines;
-    for (auto triangle: triangles) {
-      for (auto edge: triangle->edges) {
-        if (edge->isExternal()) {
-          lines.push_back(Line(*(edge->a), *(edge->b)));
-        }
-      }
-    }
-    return lines;
-  }
-
-};
-
-struct Polygon {
-  std::vector<Point*> points;
-  int textureId;
-  float textureScale = 1.0;
-  float textureX = 0.0;
-  float textureY = 0.0;
-  std::vector<Line> getLines() {
-    std::vector<Line> lines;
-    for (size_t i=0; i+1<points.size(); i++) {
-      lines.push_back(Line(*(points[i]), *(points[i+1])));
-    }
-    return lines;
-  }
-};
-
-
-struct Coin {
-  Point position;
-  Point velocity;
-  Point acceleration;
-  double rotation = 0.0;
-  bool jump = false;
-  bool onGround = false;
-  Coin(int x, int y) : position(x, y), velocity(0, 0), acceleration(0, 0) {}
-};
-
-const int COIN_SIZE = 32;
-const int POINT_SIZE = 3;
-const double GRAVITY = 0.1;
-const double GRAVITY_MAX = 0.1;
+#include "util.h"
+#include "level.h"
+#include "physics.h"
 
 class Editor {
 
@@ -188,7 +48,7 @@ class Editor {
       drawTextures = false;
       drawGrid = true;
       shouldSnapToGrid = true;
-      loadLevel();
+      loadLevel(level);
 ///      spawnCoin(200, 100);
     }
 
@@ -434,7 +294,7 @@ class Editor {
 //        loadLevel();
 //      }
       if (key == 's') {
-        saveLevel();
+        saveLevel(level);
       }
     }
 
@@ -463,111 +323,6 @@ class Editor {
         coin->jump = false;
       }
     }
-
-// Level serialization
-///////////////////
-
-
-    void saveLevel() {
-      std::map<Point*, int> pointIds;
-      std::vector<Point*> pointsById;
-      int count = 0;
-      for (Face* face: faces) {
-        for (Triangle* triangle: face->triangles) {
-          for (Edge* edge: triangle->edges) {
-            Point* point = edge->a;
-            if (pointIds.find(point) == pointIds.end()) {
-              pointIds[point] = count;
-              count++;
-              pointsById.push_back(point);
-            }
-          }
-        }
-      }
-      std::ofstream file("data/level.txt");
-      file << pointIds.size() << std::endl;
-      for (const auto& p: pointsById) {
-        file << p->x << " " << p->y << std::endl;
-      }
-      file << faces.size() << std::endl;
-      for (Face* face: faces) {
-        file << face->textureId << " ";
-        file << face->textureScale << " ";
-        file << face->textureX << " ";
-        file << face->textureY << " ";
-        file << face->triangles.size();
-        for (Triangle* triangle: face->triangles) {
-          for (Edge* edge: triangle->edges) {
-            Point* point = edge->a;
-            file << " " << pointIds[point];
-          }
-        }
-        file << std::endl;
-      }
-    }
-
-    void loadLevel() {
-      std::ifstream file("data/level.txt");
-      int numPoints;
-      file >> numPoints;
-      std::vector<Point*> points;
-      for (int i=0; i<numPoints; i++) {
-        int x;
-        int y;
-        file >> x >> y;
-        points.push_back(new Point(x, y));
-      }
-      int numFaces;
-      file >> numFaces;
-      std::map<std::pair<Point*, Point*>, Edge*> edgeMap;
-      for (int i=0; i<numFaces; i++) {
-        int textureId;
-        int numTriangles;
-        float textureScale;
-        float textureX;
-        float textureY;
-        file >> textureId >> textureScale >> textureX >> textureY >> numTriangles;
-        std::vector<Point*> pointsInPoly;
-        for (int j=0; j<numTriangles*3; j++) {
-          int pointId;
-          file >> pointId;
-          pointsInPoly.push_back(points[pointId]);
-        }
-        Face* face = new Face;
-        face->textureId = textureId;
-        face->textureScale = textureScale;
-        face->textureX = textureX;
-        face->textureY = textureY;
-        for (int triId=0; triId<numTriangles; triId++) {
-          Triangle* triangle = new Triangle();
-          for (int pointId=0; pointId<3; pointId++) {
-            Point* a = pointsInPoly[triId*3 + pointId];
-            Point* b;
-            if (pointId == 2) {
-              b = pointsInPoly[triId*3]; // wrap back to start
-            }
-            else {
-              b = pointsInPoly[triId*3 + pointId + 1];
-            }
-            auto key = std::make_pair(a, b);
-            Edge* edge;
-            auto it = edgeMap.find(key);
-            if (it == edgeMap.end()) {
-              edge = new Edge(*a, *b);
-              edgeMap.insert(std::make_pair(key, edge));
-            }
-            else {
-              edge = it->second;
-              edge->shared = true;
-            }
-            triangle->edges.push_back(edge);
-          }
-          face->triangles.push_back(triangle);
-        }
-        faces.push_back(face);
-      }
-    }
-
 
 // Level editting
 ///////////////////
@@ -668,140 +423,6 @@ class Editor {
       return getFaceContaining(*triangle);
     }
 
-
-// Physics
-///////////////////
-
-    Point project(Point what, Point where) {
-      double magn = (what * where) / len2(where);
-      return where * magn;
-    }
-
-    double lineIntersection(const Point& p0, const Point& v, const Point& pa, const Point& pb) {
-      Point n = normalize(perpendicular(pb - pa));
-      Point o = p0 + (n * COIN_SIZE); // intersection on sphere
-      double t = (n * (pa - o)) / (n * v);
-      if (t >= 0.0 && t <= 1.0) {
-        Point o2 = o + v * t;
-        double oa = len(o2 - pa);
-        double ob = len(o2 - pb);
-        double ab = len(pb - pa);
-        if (oa < ab && ob < ab) {
-          return t;
-        }
-      }
-      return FLT_MAX;
-    }
-
-    float pointIntersection(const Point& p0, const Point& v, const Point& pa) {
-      Point q = p0 - pa;
-      float a = v * v;
-      float b = 2.0 * (q * v);
-      float c = (q * q) - COIN_SIZE * COIN_SIZE;
-      float delta = b * b - 4.0 * a * c;
-      if (delta >= 0) {
-        float t1 = (-b + sqrt(delta)) / (2.0 * a);
-        float t2 = (-b - sqrt(delta)) / (2.0 * a);
-        if (t1 >= 0 && t1 <= 1.0) {
-          if (t2 >= 0 && t2 <= 1.0) {
-            if (t2 < t1) {
-              return t2;
-            }
-            else {
-              return t1;
-            }
-          }
-          return t1;
-        }
-        if (t2 >= 0 && t2 <= 1.0) {
-          return t2;
-        }
-      }
-      return FLT_MAX;
-    }
-
-    std::tuple<Point, Point> checkCollisions(const Point& p0, const Point& v) {
-      double minT = FLT_MAX;
-      Line minLine;
-      Point* minPoint = nullptr;
-      for (Polygon* polygon: polygons) {
-        auto lines = polygon->getLines();
-        for (auto& line: lines) {
-          double t = lineIntersection(p0, v, line.a, line.b);
-          if (t < minT && t >= 0.0) {
-            minT = t;
-            minLine = line;
-            minPoint = nullptr;
-          }
-          t = pointIntersection(p0, v, line.a);
-          if (t< 1.0 && t < minT) {
-            minT = t;
-            minLine = line;
-            minPoint = &minLine.a;
-          }
-          t = pointIntersection(p0, v, line.b);
-          if (t< 1.0 && t < minT) {
-            minT = t;
-            minLine = line;
-            minPoint = &minLine.b;
-          }
-        }
-      }
-      static const double epsilon = 0.1; // !!
-      minT = minT - epsilon;
-      if (minT <= 1.0) {
-        Point newP = p0 + v * minT;
-        Point slidePlane(0,0);
-        if (minPoint == nullptr) {
-          slidePlane = minLine.a - minLine.b;
-        } else {
-          std::cout << "Point collision" << std::endl;
-          slidePlane = perpendicular(newP - (*minPoint));
-        }
-        Point newV = project(v*(1.0-minT), slidePlane);
-        return checkCollisions(newP, newV);
-      }
-      return std::make_tuple(p0, v);
-    }
-
-    Point clipVelocity(const Point& p0, const Point& v) {
-      Point newP(0,0);
-      Point newV(0,0);
-      std::tie(newP, newV) = checkCollisions(p0, v);
-      return (newP + newV) - p0;
-    }
-
-    void applyVelocity(Coin& coin) {
-      Point v = coin.velocity + coin.acceleration;
-      coin.velocity = clipVelocity(coin.position, v);
-      coin.position = coin.position + coin.velocity;
-    }
-
-    void updateCoin(Coin& coin) {
-      coin.acceleration = {0.0, 0.0};
-      if (jumpKey) {
-        coin.jump = true;
-      }
-      if (coin.onGround && coin.jump) {
-        coin.acceleration.y = -GRAVITY_MAX*33;
-        coin.jump = false;
-      }
-      else {
-        coin.acceleration.y = GRAVITY_MAX;
-      }
-      if (rightKey) {
-        coin.acceleration.x = +0.036;
-      }
-      else if (leftKey) {
-        coin.acceleration.x = -0.036;
-      }
-      else {
-        double joyValue = getJoyValue();
-        coin.acceleration.x = joyValue * 0.03;
-      }
-      applyVelocity(coin);
-    }
-
     Point snapToGrid(const Point& p) {
       if (shouldSnapToGrid) {
         return Point(round(p.x/gridSize)*gridSize, round(p.y/gridSize)*gridSize);
@@ -827,7 +448,7 @@ class Editor {
         }
       }
       if (coin != nullptr) {
-        updateCoin(*coin);
+        updateCoin(*coin, polygons, leftKey, rightKey, jumpKey, getJoyValue());
       }
     }
 
@@ -1003,7 +624,8 @@ class Editor {
 
     SpriteSheet fontSheet;
 
-    std::vector<Face*> faces;
+    Level level;
+    std::vector<Face*>& faces = level.faces;
     NewTriangle* newTriangle = nullptr;
 
     Coin* coin = nullptr;
