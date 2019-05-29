@@ -59,6 +59,9 @@ class Editor {
       if (key == 229 || key == 225 || key == 16) {
         shiftKey = pressed;
       }
+      if (key == 226 || key == 230) {
+        altKey = pressed;
+      }
       if (key == 82 || key == 38) {
         jumpKey = pressed;
       }
@@ -112,6 +115,7 @@ class Editor {
     bool gameLoop() {
       mX = (mouse_x - scrollX)  * zoom;
       mY = (mouse_y - scrollY) * zoom;
+      cursor = Point(mX, mY);
       static int delay = 0;
 //      if ((++delay)%10==0)
       {
@@ -127,6 +131,11 @@ class Editor {
 // Input
 ///////////////////
 
+    void spawnCoin(int x, int y) {
+      std::cout << "Spawning coin at " << x << ", " << y << std::endl;
+      delete coin;
+      coin = new Coin(x,y);
+    }
 
     void mouseWheelUp() {
       zoom *= 1.25;
@@ -139,6 +148,7 @@ class Editor {
     void mouseDownLeft() {
       if (newTriangle == nullptr) {
         Point* p = getPointAt(mX, mY);
+        Triangle* t = getTriangleAt(cursor);
         if (shiftKey) {
           if (p != nullptr) {
             if (selectedPoints.count(p) == 0) {
@@ -147,51 +157,50 @@ class Editor {
           }
           else {
             selectingRectangle = true;
-            selectingRectangleStart = Point(mX, mY);
+            selectingRectangleStart = cursor;
           }
         }
         else {
           if (p == nullptr) {
             selectedPoints.clear();
           }
-          if (p != nullptr) {
-            if (selectedPoints.count(p) == 0 ) {
-              selectedPoints.clear();
+          else {
+            if (pointMerging) {
+              Point* first = *selectedPoints.begin();
+              mergePoints(first, p);
+              pointMerging = false;
             }
-            selectedPoints.insert(p);
-            draggingPoints = true;
-            draggingStart = Point(mX, mY);
+            else {
+              if (selectedPoints.count(p) == 0 ) {
+                selectedPoints.clear();
+              }
+              selectedPoints.insert(p);
+              draggingPoints = true;
+              draggingStart = cursor;
+            }
+          }
+          if (t == nullptr) {
+            selectedTriangles.clear();
+          }
+          else {
+            if (triangleGrouping) {
+              Face* selectedFace = getFaceContaining(**selectedTriangles.begin());
+              selectedFace->triangles.push_back(t);
+              triangleGrouping = false;
+            }
+            else {
+              if (!altKey) {
+                if (selectedTriangles.count(t) == 0 ) {
+                  selectedTriangles.clear();
+                }
+              }
+              selectedTriangles.insert(t);
+            }
           }
         }
       }
     }
 
-    double signedArea(Point& a, Point& b, Point& c) {
-      return 0.5 * (-1*a.y*b.x + a.x*b.y +a.y*c.x -b.y*c.x -a.x*c.y +b.x*c.y);
-    }
-
-    void addTriangleToLevel(const NewTriangle& trianglePoints) {
-      Face* newFace = new Face();
-      Triangle* triangle = new Triangle();
-
-      {
-        Point& a = *trianglePoints.points[0];
-        Point& b = *trianglePoints.points[1];
-        Point& c = *trianglePoints.points[2];
-        double sa = signedArea(a, b, c);
-        if (sa < 0) {
-          auto tmp = b;
-          b = c;
-          c = tmp;
-        }
-        triangle->edges.push_back(new Edge(a, b));
-        triangle->edges.push_back(new Edge(b, c));
-        triangle->edges.push_back(new Edge(c, a));
-      }
-
-      newFace->triangles.push_back(triangle);
-      faces.push_back(newFace);
-    }
 
     void mouseUpLeft() {
       if (newTriangle != nullptr) {
@@ -206,15 +215,18 @@ class Editor {
       else {
         if (selectingRectangle) {
           selectingRectangle = false;
-          for (Polygon* polygon: polygons) {
-            for (Point* point: polygon->points) {
-              float rectx0 = std::min(selectingRectangleStart.x, (double)mX);
-              float recty0 = std::min(selectingRectangleStart.y, (double)mY);
-              float rectx1 = std::max(selectingRectangleStart.x, (double)mX);
-              float recty1 = std::max(selectingRectangleStart.y, (double)mY);
-              if (point->x > rectx0 && point->x < rectx1 &&
-                  point->y > recty0 && point->y < recty1) {
-                selectedPoints.insert(point);
+          for (Face* face: level.faces) {
+            for (Triangle* triangle: face->triangles) {
+              for (Edge* edge: triangle->edges) {
+                Point* point = edge->a;
+                float rectx0 = std::min(selectingRectangleStart.x, (double)mX);
+                float recty0 = std::min(selectingRectangleStart.y, (double)mY);
+                float rectx1 = std::max(selectingRectangleStart.x, (double)mX);
+                float recty1 = std::max(selectingRectangleStart.y, (double)mY);
+                if (point->x > rectx0 && point->x < rectx1 &&
+                    point->y > recty0 && point->y < recty1) {
+                  selectedPoints.insert(point);
+                }
               }
             }
           }
@@ -296,6 +308,12 @@ class Editor {
       if (key == 's') {
         saveLevel(level);
       }
+      if (key == 'g') {
+        triangleGrouping = true;
+      }
+      if (key == 'm') {
+        pointMerging = true;
+      }
     }
 
     double getJoyValue() {
@@ -327,6 +345,21 @@ class Editor {
 // Level editting
 ///////////////////
 
+    void mergePoints(Point* newPoint, Point* oldPoint) {
+      for (Face* face: level.faces) {
+        for (Triangle* triangle: face->triangles) {
+          for (Edge* edge: triangle->edges) {
+            if (edge->a == oldPoint) {
+              edge->a = newPoint;
+            }
+            if (edge->b == oldPoint) {
+              edge->b = newPoint;
+            }
+          }
+        }
+      }
+    }
+
     Point* getOrCreatePoint(int x, int y) {
       Point* oldPoint = getPointAt(x, y);
       if (oldPoint != nullptr) {
@@ -336,6 +369,32 @@ class Editor {
     }
 
 
+    double signedArea(Point& a, Point& b, Point& c) {
+      return 0.5 * (-1*a.y*b.x + a.x*b.y +a.y*c.x -b.y*c.x -a.x*c.y +b.x*c.y);
+    }
+
+    void addTriangleToLevel(const NewTriangle& trianglePoints) {
+      Face* newFace = new Face();
+      Triangle* triangle = new Triangle();
+
+      {
+        Point& a = *trianglePoints.points[0];
+        Point& b = *trianglePoints.points[1];
+        Point& c = *trianglePoints.points[2];
+        double sa = signedArea(a, b, c);
+        if (sa < 0) {
+          auto tmp = b;
+          b = c;
+          c = tmp;
+        }
+        triangle->edges.push_back(new Edge(a, b));
+        triangle->edges.push_back(new Edge(b, c));
+        triangle->edges.push_back(new Edge(c, a));
+      }
+
+      newFace->triangles.push_back(triangle);
+      faces.push_back(newFace);
+    }
 // Polygon math
 ///////////////////
 
@@ -499,6 +558,12 @@ class Editor {
     void drawFaceWireframe(const Face& face) {
       std::set<Point*> pointsToDraw;
       for (auto triangle: face.triangles) {
+        if (selectedTriangles.count(triangle) > 0) {
+          prim.setColor(0,0,1,1);
+        }
+        else {
+          prim.setColor(1,1,1,1);
+        }
         for (auto edge: triangle->edges) {
           drawLine(*edge->a, *edge->b);
           pointsToDraw.insert(edge->a);
@@ -510,12 +575,14 @@ class Editor {
         }
       }
       for (auto point: pointsToDraw) {
-        if (selectedPoints.count(point)) {
+        if (selectedPoints.count(point) > 0) {
           prim.setColor(0,0,1,1);
-        } else {
+        }
+        else {
           prim.setColor(1,1,1,1);
         }
         drawPoint(*point);
+        prim.setColor(1,1,1,1);
       }
     }
 
@@ -536,6 +603,11 @@ class Editor {
     }
 
     std::string getModeName() {
+      if (pointMerging == true) {
+      }
+      if (triangleGrouping == true) {
+        return "Adding triangle to face";
+      }
       if (newTriangle != nullptr) {
         return "Creating triangle";
       }
@@ -545,6 +617,7 @@ class Editor {
     }
 
     void printStatus() {
+      prim.setColor(0,0,0, 1);
       Triangle* triangle = getTriangleAt(Point(mX, mY));
       Face* face = nullptr;
       if (triangle != nullptr) {
@@ -554,6 +627,7 @@ class Editor {
       std::ostringstream os;
       os << "Mode: " << getModeName() << "\n";
       os << "Face: " << face << "\n";
+      os << "Triangle: " << triangle << "\n";
       if (face) {
         os << "  textureId: " << face->textureId << "\n";
         os << "  textureScale: " << face->textureScale << "\n";
@@ -564,6 +638,11 @@ class Editor {
         os << "  " << *point << "\n";
       }
       print(32,32, os.str());
+      os.str("");
+      os.clear();
+      os << "Selected points: " << selectedPoints.size() << "\n";
+      os << "Selected triangles: " << selectedTriangles.size() << "\n";
+      print(32,screen_h-32, os.str());
     }
 
     void draw() {
@@ -616,12 +695,6 @@ class Editor {
       printStatus();
     }
 
-    void spawnCoin(int x, int y) {
-      std::cout << "Spawning coin at " << x << ", " << y << std::endl;
-      delete coin;
-      coin = new Coin(x,y);
-    }
-
     SpriteSheet fontSheet;
 
     Level level;
@@ -635,9 +708,13 @@ class Editor {
     std::vector<Polygon*> polygons;
 
     std::set<Point*> selectedPoints;
+    std::set<Triangle*> selectedTriangles;
+    bool triangleGrouping = false;
+    bool pointMerging = false;
     bool draggingPoints = false;
     Point draggingStart = Point(0,0);
     bool shiftKey = false;
+    bool altKey = false;
     Point selectingRectangleStart = Point(0,0);
     bool selectingRectangle = false;
     bool drawGrid = false;
@@ -653,6 +730,7 @@ class Editor {
     int scrollStartY;
     int mX;
     int mY;
+    Point cursor = Point(mX, mY);
     bool leftKey = false;
     bool rightKey = false;
     bool jumpKey = false;

@@ -138,7 +138,7 @@ void PrimitiveShader::drawConvexPolygon(const std::vector<float>& points, float 
   glUniform1f(u_textureScale, texture_scale);
   glUniform2f(u_texturePos, texture_pos_x, texture_pos_y);
   glUniform1i(u_useTexture, 1);
-  glDrawArrays(GL_TRIANGLE_FAN, 0, points.size()/2);
+  glDrawArrays(GL_TRIANGLES, 0, points.size()/2);
 }
 
 void PrimitiveShader::drawCircleOutline(float x0, float y0, float r) {
