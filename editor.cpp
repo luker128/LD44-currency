@@ -811,9 +811,25 @@ class EditorStateNewTriangle: public EditorState {
     NewTriangle newTriangle;
 };
 
+class EditorStateMergePoints: public EditorState {
+  public:
+    EditorStateMergePoints(Editor* e): EditorState(e) {}
+    const std::string& getName() { static const std::string name = "Merging points"; return name; }
+    EditorState* mouseLeftUp() override {
+      Point* point = context->getPointAt(context->mX, context->mY);
+      if (point != nullptr) {
+        return new EditorStateIdle(context);
+      }
+      return this;
+    }
+};
+
 EditorState* EditorStateIdle::keyPress(int key) {
   if (key == ' ') {
     return new EditorStateNewTriangle(context);
+  }
+  else if (key == 'm') {
+    return new EditorStateMergePoints(context);
   }
   return this;
 }
