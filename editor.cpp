@@ -17,22 +17,62 @@
 #include "level.h"
 #include "physics.h"
 
+
+class Editor;
+
+class EditorState {
+  public:
+    EditorState(Editor* e): context(e) {}
+    virtual const std::string& getName() = 0;
+    virtual void draw() {}
+    virtual EditorState* mouseLeftDown() { return this; }
+    virtual EditorState* mouseLeftUp() { return this; }
+    virtual EditorState* mouseRightDown() { return this;}
+    virtual EditorState* mouseRightUp() { return this; }
+    virtual EditorState* mouseMiddleDown() { return this; }
+    virtual EditorState* mouseMiddleUp() { return this; }
+    virtual EditorState* keyPress(int) { return this; }
+  protected:
+    Editor* context;
+};
+
+
+
+
+class EditorStateIdle: public EditorState {
+  public:
+    EditorStateIdle(Editor* e): EditorState(e) {}
+    const std::string& getName() { static const std::string name = "Idle"; return name; }
+    EditorState* keyPress(int key);
+};
+
+struct NewTriangle {
+  std::vector<Point*> points;
+  NewTriangle(Point* p = nullptr) {
+    if (p != nullptr) {
+      points.push_back(p);
+    }
+  }
+};
+
 class Editor {
 
-    struct NewTriangle {
-      std::vector<Point*> points;
-      NewTriangle(Point* p = nullptr) {
-        if (p != nullptr) {
-          points.push_back(p);
-        }
-      }
-    };
 
     Editor(const Editor&) = delete;
 
+    EditorState* state;
+
   public:
 
+    void changeState(EditorState* newState) {
+      if (newState != nullptr && newState != state) {
+        delete state;
+        state = newState;
+      }
+    }
+
     Editor() :
+      state(new EditorStateIdle(this)),
       fontSheet("data/font.png", 16, 16),
       coinImage("data/coin5.png", 64, 64)
     {
@@ -54,7 +94,8 @@ class Editor {
 
     void keyPressEvent(bool pressed, unsigned char key, unsigned short code) {
       if (pressed == true) {
-        keyPress(key);
+        //keyPress(key);
+        changeState(state->keyPress(key));
       }
       if (key == 229 || key == 225 || key == 16) {
         shiftKey = pressed;
@@ -75,22 +116,28 @@ class Editor {
 
     void mouseButton(bool pressed, int button) {
       if (pressed == false && button == 1) {
-        mouseUpLeft();
+        //mouseUpLeft();
+        changeState(state->mouseLeftUp());
       }
       if (pressed == false && button == 3) {
-        mouseUpRight();
+        //mouseUpRight();
+        changeState(state->mouseRightUp());
       }
       if (pressed == false && button == 2) {
-        mouseUpMiddle();
+        //mouseUpMiddle();
+        changeState(state->mouseMiddleUp());
       }
       if (pressed == true && button == 1) {
-        mouseDownLeft();
+        //mouseDownLeft();
+        changeState(state->mouseLeftDown());
       }
       if (pressed == true && button == 3) {
         mouseDownRight();
+        changeState(state->mouseRightDown());
       }
       if (pressed == true && button == 2) {
         mouseDownMiddle();
+        changeState(state->mouseMiddleDown());
       }
     }
 
@@ -125,7 +172,7 @@ class Editor {
       return true;
     }
 
-  private:
+//  private:
 
 
 // Input
@@ -145,7 +192,7 @@ class Editor {
       zoom *= 0.75;
     }
 
-    void mouseDownLeft() {
+    void mouseDownLeft() {/*
       if (newTriangle == nullptr) {
         Point* p = getPointAt(mX, mY);
         Triangle* t = getTriangleAt(cursor);
@@ -199,10 +246,12 @@ class Editor {
           }
         }
       }
+      */
     }
 
 
     void mouseUpLeft() {
+      /*
       if (newTriangle != nullptr) {
         Point* point = getOrCreatePoint(mX, mY);
         newTriangle->points.push_back(point);
@@ -235,13 +284,11 @@ class Editor {
           draggingPoints = false;
         }
       }
+      */
     }
 
     void mouseDownRight() {}
     void mouseUpRight() {
-      if (newTriangle != nullptr) {
-        newTriangle->points.pop_back();
-      }
     }
 
     void mouseDownMiddle() {
@@ -260,12 +307,14 @@ class Editor {
         delete coin;
         coin = nullptr;
       }
+      /*
       if (key == 32) { // SPACE
         if (newTriangle == nullptr) {
           Point* point = getPointAt(mX, mY);
           newTriangle = new NewTriangle(point);
         }
       }
+      */
       if (key == 'f') {
         drawTextures = !drawTextures;
       }
@@ -593,16 +642,19 @@ class Editor {
       drawFaceWireframe(face);
     }
 
-    void drawNewTriangle(NewTriangle* triangle) {
-      if (triangle != nullptr && triangle->points.size() > 0) {
-        for (int i=0; i<triangle->points.size()-1; i++) {
-          drawLine(*triangle->points[i], *triangle->points[i+1]);
+    void drawNewTriangle(NewTriangle triangle) {
+      if (triangle.points.size() > 0) {
+        prim.setColor(1,1,0,1);
+        for (int i=0; i<triangle.points.size()-1; i++) {
+          drawLine(*triangle.points[i], *triangle.points[i+1]);
         }
-        drawLine(*triangle->points[triangle->points.size()-1], Point(mX, mY));
+        drawLine(*triangle.points[triangle.points.size()-1], Point(mX, mY));
       }
     }
 
     std::string getModeName() {
+      return state->getName();
+      /*
       if (pointMerging == true) {
       }
       if (triangleGrouping == true) {
@@ -614,6 +666,7 @@ class Editor {
       else {
         return "Idle";
       }
+      */
     }
 
     void printStatus() {
@@ -669,10 +722,6 @@ class Editor {
       for (Face* face: faces) {
         drawFace(*face);
       }
-      prim.setColor(1,1,0,1);
-      if (newTriangle != nullptr) {
-        drawNewTriangle(newTriangle);
-      }
       if (coin != nullptr) {
         if (coin->velocity.x != 0) {
           coin->rotation += coin->velocity.x / COIN_SIZE;
@@ -693,13 +742,13 @@ class Editor {
         prim.drawLine(mX, mY, mX, selectingRectangleStart.y);
       }
       printStatus();
+      state->draw();
     }
 
     SpriteSheet fontSheet;
 
     Level level;
     std::vector<Face*>& faces = level.faces;
-    NewTriangle* newTriangle = nullptr;
 
     Coin* coin = nullptr;
     bool drawTextures = false;
@@ -738,6 +787,36 @@ class Editor {
 
 
 
+
+class EditorStateNewTriangle: public EditorState {
+  public:
+    EditorStateNewTriangle(Editor* e): EditorState(e) {}
+    const std::string& getName() { static const std::string name = "Creating triangle"; return name; }
+    void draw() override {
+      context->drawNewTriangle(newTriangle);
+    }
+    EditorState* mouseLeftUp() override {
+      Point* point = context->getOrCreatePoint(context->mX, context->mY);
+      newTriangle.points.push_back(point);
+      if (newTriangle.points.size() == 3) {
+        context->addTriangleToLevel(newTriangle);
+        return new EditorStateIdle(context);
+      }
+      return this;
+    }
+    EditorState* mouseRightUp() override {
+      newTriangle.points.pop_back();
+      return this;
+    }
+    NewTriangle newTriangle;
+};
+
+EditorState* EditorStateIdle::keyPress(int key) {
+  if (key == ' ') {
+    return new EditorStateNewTriangle(context);
+  }
+  return this;
+}
 
 
 
