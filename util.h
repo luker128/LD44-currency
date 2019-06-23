@@ -11,6 +11,7 @@ double dot(const Point& a, const Point& b);
 double operator*(const Point& a, const Point& b);
 Point operator*(const Point& v, double s);
 Point operator/(const Point& v, double s);
+Point& operator+=(Point& lhs, const Point& rhs);
 double len(const Point& v);
 double len2(const Point& v);
 Point operator+(const Point& a, const Point& b);

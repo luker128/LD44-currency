@@ -17,6 +17,12 @@ Point operator/(const Point& v, double s) {
   return Point(v.x / s, v.y / s);
 }
 
+Point& operator+=(Point& lhs, const Point& rhs) {
+  lhs.x += rhs.x;
+  lhs.y += rhs.y;
+  return lhs;
+}
+
 double len(const Point& v) {
   return sqrt(v.x*v.x + v.y*v.y);
 }

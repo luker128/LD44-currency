@@ -10,41 +10,16 @@
 #include <sstream>
 #include <iostream>
 #include <fstream>
+#include <memory>
 #include "sys/main.h"
-#include "gfx/primitive.h"
+#include "gfx/canvas.h"
 #include "gfx/gfx.h"
 #include "util.h"
 #include "level.h"
 #include "physics.h"
+#include "gui.h"
+#include "editor_states.h"
 
-
-class Editor;
-
-class EditorState {
-  public:
-    EditorState(Editor* e): context(e) {}
-    virtual const std::string& getName() = 0;
-    virtual void draw() {}
-    virtual EditorState* mouseLeftDown() { return this; }
-    virtual EditorState* mouseLeftUp() { return this; }
-    virtual EditorState* mouseRightDown() { return this;}
-    virtual EditorState* mouseRightUp() { return this; }
-    virtual EditorState* mouseMiddleDown() { return this; }
-    virtual EditorState* mouseMiddleUp() { return this; }
-    virtual EditorState* keyPress(int) { return this; }
-  protected:
-    Editor* context;
-};
-
-
-
-
-class EditorStateIdle: public EditorState {
-  public:
-    EditorStateIdle(Editor* e): EditorState(e) {}
-    const std::string& getName() { static const std::string name = "Idle"; return name; }
-    EditorState* keyPress(int key);
-};
 
 struct NewTriangle {
   std::vector<Point*> points;
@@ -73,8 +48,8 @@ class Editor {
 
     Editor() :
       state(new EditorStateIdle(this)),
-      fontSheet("data/font.png", 16, 16),
-      coinImage("data/coin5.png", 64, 64)
+      coinImage("data/coin5.png", 64, 64),
+      gui(canvas)
     {
       // https://www.deviantart.com/strapaca/art/Brick-wall-seamless-texture-782082949
       textures.emplace_back("data/bricks.png");
@@ -90,6 +65,9 @@ class Editor {
       shouldSnapToGrid = true;
       loadLevel(level);
 ///      spawnCoin(200, 100);
+      auto button = std::make_unique<GuiButton>(Point(100,100), Point(100, 32), "Hello");
+
+      gui.addElement(std::move(button));
     }
 
     void keyPressEvent(bool pressed, unsigned char key, unsigned short code) {
@@ -124,7 +102,7 @@ class Editor {
         changeState(state->mouseRightUp());
       }
       if (pressed == false && button == 2) {
-        //mouseUpMiddle();
+        mouseUpMiddle();
         changeState(state->mouseMiddleUp());
       }
       if (pressed == true && button == 1) {
@@ -132,7 +110,7 @@ class Editor {
         changeState(state->mouseLeftDown());
       }
       if (pressed == true && button == 3) {
-        mouseDownRight();
+        //mouseDownRight();
         changeState(state->mouseRightDown());
       }
       if (pressed == true && button == 2) {
@@ -160,6 +138,16 @@ class Editor {
 
 
     bool gameLoop() {
+      static int last_mouse_x = mouse_x;
+      static int last_mouse_y = mouse_y;
+      int mickey_x = mouse_x - last_mouse_x;
+      int mickey_y = mouse_y - last_mouse_y;
+      last_mouse_x = mouse_x;
+      last_mouse_y = mouse_y;
+      if (mickey_x != 0 || mickey_y != 0) {
+        changeState(state->mouseMove(mickey_x, mickey_y));
+      }
+
       mX = (mouse_x - scrollX)  * zoom;
       mY = (mouse_y - scrollY) * zoom;
       cursor = Point(mX, mY);
@@ -251,40 +239,6 @@ class Editor {
 
 
     void mouseUpLeft() {
-      /*
-      if (newTriangle != nullptr) {
-        Point* point = getOrCreatePoint(mX, mY);
-        newTriangle->points.push_back(point);
-        if (newTriangle->points.size() == 3) {
-          addTriangleToLevel(*newTriangle);
-          delete newTriangle;
-          newTriangle = nullptr;
-        }
-      }
-      else {
-        if (selectingRectangle) {
-          selectingRectangle = false;
-          for (Face* face: level.faces) {
-            for (Triangle* triangle: face->triangles) {
-              for (Edge* edge: triangle->edges) {
-                Point* point = edge->a;
-                float rectx0 = std::min(selectingRectangleStart.x, (double)mX);
-                float recty0 = std::min(selectingRectangleStart.y, (double)mY);
-                float rectx1 = std::max(selectingRectangleStart.x, (double)mX);
-                float recty1 = std::max(selectingRectangleStart.y, (double)mY);
-                if (point->x > rectx0 && point->x < rectx1 &&
-                    point->y > recty0 && point->y < recty1) {
-                  selectedPoints.insert(point);
-                }
-              }
-            }
-          }
-        }
-        if (draggingPoints == true) {
-          draggingPoints = false;
-        }
-      }
-      */
     }
 
     void mouseDownRight() {}
@@ -307,50 +261,10 @@ class Editor {
         delete coin;
         coin = nullptr;
       }
-      /*
-      if (key == 32) { // SPACE
-        if (newTriangle == nullptr) {
-          Point* point = getPointAt(mX, mY);
-          newTriangle = new NewTriangle(point);
-        }
-      }
-      */
-      if (key == 'f') {
-        drawTextures = !drawTextures;
-      }
       if (key == '\r') {
         spawnCoin(mX, mY);
       }
-      if (key == '[') {
-        face->textureScale *= 0.5;
-      }
-      if (key == ']') {
-        face->textureScale *= 2.0;
-      }
-      if (key == 'j') {
-        face->textureY += 1;
-      }
-      if (key == 'k') {
-        face->textureY -= 1;
-      }
-      if (key == 'h') {
-        face->textureX -= 1;
-      }
-      if (key == 'l') {
-        face->textureX += 1;
-      }
-      if (key == 75 || key == 33) { // pg up
-        face->textureId++;
-        if (face->textureId == textures.size()) {
-          face->textureId = 0;
-        }
-      }
-      if (key == 78 || key == 34) { // pg dn
-        face->textureId--;
-        if (face->textureId == -1) {
-          face->textureId = textures.size()-1;
-        }
-      }
+
 //      if (key == 'l') {
 //        loadLevel();
 //      }
@@ -391,6 +305,36 @@ class Editor {
       }
     }
 
+    typedef std::vector<Image> TextureStorage;
+
+    class TextureSelector {
+
+      public:
+
+        TextureSelector(TextureStorage& textures):
+          textures(textures) {}
+
+        void draw(Canvas& canvas) {
+          const int columns = 3;
+          Point origin = Point(screen_w - columns * offsetHorizontal.x, 0);
+          int count = 0;
+          for (auto texture: textures) {
+            Point pos = origin + offsetHorizontal * (count % columns) + offsetVertical * (count / columns);
+            canvas.draw(texture, pos + size/2, size);
+            count++;
+          }
+        }
+
+
+      private:
+        const Point size = Point(64, 64);
+        const Point offsetHorizontal = Point(64, 0);
+        const Point offsetVertical = Point(0, 64);
+
+        TextureStorage& textures;
+
+    };
+
 // Level editting
 ///////////////////
 
@@ -409,12 +353,12 @@ class Editor {
       }
     }
 
-    Point* getOrCreatePoint(int x, int y) {
-      Point* oldPoint = getPointAt(x, y);
+    Point* getOrCreatePoint(const Point& p) {
+      Point* oldPoint = getPointAt(p);
       if (oldPoint != nullptr) {
         return oldPoint;
       }
-      return new Point(x, y);
+      return new Point(p);
     }
 
 
@@ -448,13 +392,13 @@ class Editor {
 ///////////////////
 
 
-    Point* getPointAt(int x, int y) {
+    Point* getPointAt(const Point& p) {
       for (auto& face: faces) {
         for (auto& triangle: face->triangles) {
           for (auto& edge: triangle->edges) {
             Point* point = edge->a;
-            int dx = abs(x - point->x);
-            int dy = abs(y - point->y);
+            int dx = abs(p.x - point->x);
+            int dy = abs(p.y - point->y);
             if (std::max(dx, dy) <= POINT_SIZE) {
               return point;
             }
@@ -462,6 +406,10 @@ class Editor {
         }
       }
       return nullptr;
+    }
+
+    Point* getPointAtCursor() {
+      return getPointAt(cursor);
     }
 
     bool sideOfLine(double x, double y, Point* a, Point* b) {
@@ -564,30 +512,14 @@ class Editor {
 // Drawing
 ///////////////////
 
-    void print(int start_x, int start_y, const std::string& text, float size=1.0) {
-      int x = start_x - 8;
-      int y = start_y - 8;
-      const float kern = 0.8;
-      for (char c: text) {
-        if (c == '\n') {
-          x = start_x - 8;
-          y += 20;
-        }
-        else {
-          fontSheet.drawSpriteScaled(x, y, c, size);
-          x += fontSheet.getFrameWidth() * kern * size;
-        }
-      }
-    }
-
     void drawPoint(const Point& point) {
       static const int SIZE = POINT_SIZE;
-      prim.drawRectangle(point.x * zoom - SIZE, point.y * zoom - SIZE,
+      canvas.drawRectangle(point.x * zoom - SIZE, point.y * zoom - SIZE,
                          point.x * zoom + SIZE, point.y * zoom + SIZE);
     }
 
     void drawLine(const Point& a, const Point& b) {
-      prim.drawLine(a.x * zoom, a.y * zoom,
+      canvas.drawLine(a.x * zoom, a.y * zoom,
                     b.x * zoom, b.y * zoom);
     }
 
@@ -601,17 +533,17 @@ class Editor {
         }
       }
       glBindTexture(GL_TEXTURE_2D, textures[face.textureId].getTexture());
-      prim.drawConvexPolygon(positions, face.textureScale / zoom, face.textureX * zoom, face.textureY * zoom);
+      canvas.drawConvexPolygon(positions, face.textureScale / zoom, face.textureX * zoom, face.textureY * zoom);
     }
 
     void drawFaceWireframe(const Face& face) {
       std::set<Point*> pointsToDraw;
       for (auto triangle: face.triangles) {
         if (selectedTriangles.count(triangle) > 0) {
-          prim.setColor(0,0,1,1);
+          canvas.setColor(0,0,1,1);
         }
         else {
-          prim.setColor(1,1,1,1);
+          canvas.setColor(1,1,1,1);
         }
         for (auto edge: triangle->edges) {
           drawLine(*edge->a, *edge->b);
@@ -625,13 +557,13 @@ class Editor {
       }
       for (auto point: pointsToDraw) {
         if (selectedPoints.count(point) > 0) {
-          prim.setColor(0,0,1,1);
+          canvas.setColor(0,0,1,1);
         }
         else {
-          prim.setColor(1,1,1,1);
+          canvas.setColor(1,1,1,1);
         }
         drawPoint(*point);
-        prim.setColor(1,1,1,1);
+        canvas.setColor(1,1,1,1);
       }
     }
 
@@ -644,7 +576,7 @@ class Editor {
 
     void drawNewTriangle(NewTriangle triangle) {
       if (triangle.points.size() > 0) {
-        prim.setColor(1,1,0,1);
+        canvas.setColor(1,1,0,1);
         for (int i=0; i<triangle.points.size()-1; i++) {
           drawLine(*triangle.points[i], *triangle.points[i+1]);
         }
@@ -654,29 +586,16 @@ class Editor {
 
     std::string getModeName() {
       return state->getName();
-      /*
-      if (pointMerging == true) {
-      }
-      if (triangleGrouping == true) {
-        return "Adding triangle to face";
-      }
-      if (newTriangle != nullptr) {
-        return "Creating triangle";
-      }
-      else {
-        return "Idle";
-      }
-      */
     }
 
     void printStatus() {
-      prim.setColor(0,0,0, 1);
+      canvas.setColor(0,0,0, 1);
       Triangle* triangle = getTriangleAt(Point(mX, mY));
       Face* face = nullptr;
       if (triangle != nullptr) {
         face = getFaceContaining(*triangle);
       }
-      Point* point = getPointAt(mX, mY);
+      Point* point = getPointAt(cursor);
       std::ostringstream os;
       os << "Mode: " << getModeName() << "\n";
       os << "Face: " << face << "\n";
@@ -690,69 +609,70 @@ class Editor {
       if (point) {
         os << "  " << *point << "\n";
       }
-      print(32,32, os.str());
+      canvas.print({32,32}, os.str());
       os.str("");
       os.clear();
       os << "Selected points: " << selectedPoints.size() << "\n";
       os << "Selected triangles: " << selectedTriangles.size() << "\n";
-      print(32,screen_h-32, os.str());
+      canvas.print({32,screen_h-32.0}, os.str());
+    }
+
+    void clear() {
+      glClear(GL_COLOR_BUFFER_BIT);
+      if (drawGrid) {
+        canvas.setColor((101/255.0)*0.9, (184/255.0)*0.9, (227/225.0)*0.9, 1.0);
+        canvas.setColor(0,0,0, 0.06);
+        for (int y=0; y<screen_h/gridSize; y++) {
+          canvas.drawLine(0,gridSize*y, screen_w, gridSize*y);
+        }
+        for (int x=0; x<screen_w/gridSize; x++) {
+          canvas.drawLine(gridSize*x, 0, gridSize*x, screen_h);
+        }
+      }
+    }
+
+    void drawCoin() {
+      canvas.setScroll({(screen_w/2)-coin->position.x,
+                     (screen_h/2)-coin->position.y});
+      if (coin->velocity.x != 0) {
+        coin->rotation += coin->velocity.x / COIN_SIZE;
+      }
+      //coinImage.drawSpriteRotated(coin->position.x+scrollX, coin->position.y+scrollY, 0, coin->rotation);
+      coinImage.drawSpriteRotated(screen_w / 2, screen_h /2, 0, coin->rotation);
+      if (!drawTextures) {
+        canvas.drawLine(coin->position.x, coin->position.y,
+                      coin->position.x + coin->velocity.x * 30,
+                      coin->position.y + coin->velocity.y * 30
+            );
+      }
     }
 
     void draw() {
-      glClear(GL_COLOR_BUFFER_BIT);
-      if (drawGrid) {
-        prim.setColor((101/255.0)*0.9, (184/255.0)*0.9, (227/225.0)*0.9, 1.0);
-        prim.setColor(0,0,0, 0.06);
-        for (int y=0; y<screen_h/gridSize; y++) {
-          prim.drawLine(0,gridSize*y, screen_w, gridSize*y);
-        }
-        for (int x=0; x<screen_w/gridSize; x++) {
-          prim.drawLine(gridSize*x, 0, gridSize*x, screen_h);
-        }
-      }
+      clear();
       if (coin != nullptr) {
-        prim.setScroll((screen_w/2)-coin->position.x,
-                       (screen_h/2)-coin->position.y);
+        drawCoin();
       }
       else {
-        prim.setScroll(scrollX, scrollY);
-    //    prim.setScale(zoom);
+        canvas.setScroll({scrollX, scrollY});
+    //    canvas.setScale(zoom);
       }
-      prim.setColor(1,1,1,1);
+      canvas.setColor(1,1,1,1);
       for (Face* face: faces) {
         drawFace(*face);
       }
-      if (coin != nullptr) {
-        if (coin->velocity.x != 0) {
-          coin->rotation += coin->velocity.x / COIN_SIZE;
-        }
-        //coinImage.drawSpriteRotated(coin->position.x+scrollX, coin->position.y+scrollY, 0, coin->rotation);
-        coinImage.drawSpriteRotated(screen_w / 2, screen_h /2, 0, coin->rotation);
-        if (!drawTextures) {
-          prim.drawLine(coin->position.x, coin->position.y,
-                        coin->position.x + coin->velocity.x * 30,
-                        coin->position.y + coin->velocity.y * 30
-              );
-        }
-      }
-      if (selectingRectangle) {
-        prim.drawLine(selectingRectangleStart.x, selectingRectangleStart.y, mX, selectingRectangleStart.y);
-        prim.drawLine(selectingRectangleStart.x, selectingRectangleStart.y, selectingRectangleStart.x, mY);
-        prim.drawLine(mX, mY, selectingRectangleStart.x, mY);
-        prim.drawLine(mX, mY, mX, selectingRectangleStart.y);
-      }
       printStatus();
       state->draw();
+      gui.draw();
+      textureSelector.draw(canvas);
     }
 
-    SpriteSheet fontSheet;
 
     Level level;
     std::vector<Face*>& faces = level.faces;
 
     Coin* coin = nullptr;
     bool drawTextures = false;
-    PrimitiveShader prim;
+    Canvas canvas;
     SpriteSheet coinImage;
     std::vector<Polygon*> polygons;
 
@@ -770,7 +690,8 @@ class Editor {
     bool shouldSnapToGrid = false;
     float gridSize = 10.0;
 
-    std::vector<Image> textures;
+    TextureStorage textures;
+    TextureSelector textureSelector = TextureSelector(textures);
     double scrollX = 0;
     double scrollY = 0;
     float zoom = 1.0;
@@ -783,57 +704,12 @@ class Editor {
     bool leftKey = false;
     bool rightKey = false;
     bool jumpKey = false;
+
+    Gui gui;
 };
 
 
-
-
-class EditorStateNewTriangle: public EditorState {
-  public:
-    EditorStateNewTriangle(Editor* e): EditorState(e) {}
-    const std::string& getName() { static const std::string name = "Creating triangle"; return name; }
-    void draw() override {
-      context->drawNewTriangle(newTriangle);
-    }
-    EditorState* mouseLeftUp() override {
-      Point* point = context->getOrCreatePoint(context->mX, context->mY);
-      newTriangle.points.push_back(point);
-      if (newTriangle.points.size() == 3) {
-        context->addTriangleToLevel(newTriangle);
-        return new EditorStateIdle(context);
-      }
-      return this;
-    }
-    EditorState* mouseRightUp() override {
-      newTriangle.points.pop_back();
-      return this;
-    }
-    NewTriangle newTriangle;
-};
-
-class EditorStateMergePoints: public EditorState {
-  public:
-    EditorStateMergePoints(Editor* e): EditorState(e) {}
-    const std::string& getName() { static const std::string name = "Merging points"; return name; }
-    EditorState* mouseLeftUp() override {
-      Point* point = context->getPointAt(context->mX, context->mY);
-      if (point != nullptr) {
-        return new EditorStateIdle(context);
-      }
-      return this;
-    }
-};
-
-EditorState* EditorStateIdle::keyPress(int key) {
-  if (key == ' ') {
-    return new EditorStateNewTriangle(context);
-  }
-  else if (key == 'm') {
-    return new EditorStateMergePoints(context);
-  }
-  return this;
-}
-
+#include "states.h"
 
 
 Editor* editor = nullptr;

@@ -470,3 +470,8 @@ void SpriteSheet::drawSpriteRotated(int x, int y, int frame, float scale) {
   SpriteShader::getInstance().drawSprite(image, x, y, frame, sheetSize, frameWidth, frameHeight, scale);
 }
 
+void Image::draw(int x, int y, int tw, int th) const {
+  SpriteShader::getInstance().drawSprite(*this, x, y, 0, 1, tw, th, 0);
+}
+
+

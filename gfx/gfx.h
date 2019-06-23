@@ -11,6 +11,7 @@ class Image {
   public:
     Image(const std::string &filename);
     GLuint getTexture() const { return texture; }
+    void draw(int x, int y, int tw, int th) const;
     int getWidth() const { return w; };
     int getHeight() const { return h; };
   private:
